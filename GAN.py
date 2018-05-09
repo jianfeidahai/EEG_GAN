@@ -10,7 +10,7 @@ import pdb
 from utils import Flatten
 import matplotlib.pyplot as plt
 
-#BatchNorm -> LayerNorm or pixelnorm
+#BatchNorm -> LayerNorm or pixelnorma
 
 class Generator(nn.Module):
     def __init__(self):
