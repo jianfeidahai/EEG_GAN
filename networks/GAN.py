@@ -266,11 +266,15 @@ class GAN(object):
 
                     G_loss = G_fake_loss #+C_fake_loss
                     if iG == 0:
-                        print("[E%03d]"%epoch,"G_loss : ", G_loss.data[0], "  D_loss : ", D_loss.data[0], "   D_acc : ", D_acc, "  G_acc : ", G_acc)
+                        #print("[E%03d]"%epoch,"G_loss : ", G_loss.data[0], "  D_loss : ", D_loss.data[0], "   D_acc : ", D_acc, "  G_acc : ", G_acc)
                         self.train_hist['G_loss'].append(G_loss.data[0])
                 
                     G_loss.backward()
                     self.G_optimizer.step()
+
+
+                if (((iB+1)%100)) == 0:
+                    print('[E%03d]'%(epoch+1), 'G_loss : ', G_loss.data[0], '  D_loss : ' , D_loss.data[0],  '  D_acc : ' , D_acc, '  G_acc : ', G_acc)
                     
                     
 
