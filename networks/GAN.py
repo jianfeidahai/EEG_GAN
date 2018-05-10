@@ -15,7 +15,7 @@ import matplotlib.pyplot as plt
 class Generator(nn.Module):
     def __init__(self):
         super(Generator, self).__init__()
-        self.input_dim = 100
+        self.input_dim = 300
         self.input_height = 1
         self.input_width = 1
         self.output_dim = 3
@@ -92,9 +92,6 @@ class Discriminator(nn.Module):
 
         self.convCls = nn.Sequential(
             nn.Conv2d(256, self.num_cls, 4, bias=False),
-            #Flatten()
-            #nn.Linear(256, self.num_cls),
-            #nn.Softmax2d()
         )
 
         self.convGAN = nn.Sequential(
@@ -107,25 +104,25 @@ class Discriminator(nn.Module):
         feature = self.conv(y_)
 
         fGAN = self.convGAN(feature).squeeze(3).squeeze(2)
-        #fcls = self.convCls(feature).squeeze(3).squeeze(2)
+        fcls = self.convCls(feature).squeeze(3).squeeze(2)
 
-        return fGAN
+        return fGAN, fcls
 
 class GAN(object):
-    def __init__(self):#, args):
+    def __init__(self, args):
         #parameters
         self.batch_size = 128 #args.batch_size
-        self.epoch = 1000#args.epoch
+        self.epoch = 300#args.epoch
         
-        self.save_dir = './models'#args.save_dir
-        self.result_dir = './results'#args.result_dir
+        self.save_dir = '../models'#args.save_dir
+        self.result_dir = '../results'#args.result_dir
         self.dataset = "ImageNet"#args.dataset
-        ''' 
-        self.dataroot_dir = args.dataroot_dir
+        self.dataroot_dir = '../../ImageNet/ILSVRC/Data/DET'#args.dataroot_dir
+        '''
         self.log_dir = args.log_dir
         self.multi_gpu = args.multi_gpu
         '''
-        self.model_name = "GAN"#args.gan_type
+        self.model_name = args.gan_type
         self.sample_num = 128
         self.gpu_mode = True#args.gpu_mode
         self.num_workers = 0#args.num_workers
@@ -140,11 +137,10 @@ class GAN(object):
         #load dataset
         self.data_loader = DataLoader(utils.ImageNet(root_dir = '../../ImageNet/ILSVRC/Data/DET',transform=transforms.Compose([transforms.Scale(100), transforms.RandomCrop(64),  transforms.ToTensor()]),_type=self.type),
                                       batch_size=self.batch_size, shuffle=True, num_workers=self.num_workers)
-        self.enc_dim = 100 # dimension of output from Encoder
+        self.enc_dim = 300 # dimension of output from Encoder
         self.num_cls = self.data_loader.dataset.num_cls # number of class ImageNet
 
         #networks init
-
         self.G = Generator()
         self.D = Discriminator(num_cls=self.num_cls)
 
@@ -159,17 +155,18 @@ class GAN(object):
             self.MSE_loss = nn.MSELoss().cuda()
             self.L1_loss = nn.L1Loss().cuda()
             self.ML_loss = nn.MultiLabelMarginLoss().cuda()
+            self.sample_z_ = Variable(torch.rand((self.batch_size, self.enc_dim)).cuda(), volatile=True)
         else:
             self.CE_loss = nn.CrossEntropyLoss()
             self.BCE_loss = nn.BCELoss()
             self.MSE_loss = nn.MSELoss()
             self.L1_loss = nn.L1Loss()
             self.ML_loss = nn.MultiLabelMarginLoss()
+            self.sample_z_ = Variable(torch.rand((self.batch_size, self.enc_dim)), volatile=True)
 
     def train(self):
         self.train_hist = {}
         self.train_hist['D_loss'] = []
-        #self.train_hist['E_loss'] = []
         self.train_hist['G_loss'] = []
         self.train_hist['total_time'] = []
 
@@ -183,56 +180,51 @@ class GAN(object):
         self.D.train()
         start_time = time.time()
         for epoch in range(self.epoch):
-            #self.G.train()
             self.G.train()
             epoch_start_time = time.time()
             for iB, (x_, class_label) in enumerate(self.data_loader):
-                pdb.set_trace()
+                
                 if iB == self.data_loader.dataset.__len__() // self.batch_size:
                     break
 
-                #Make Laten Space
-                #z_ = torch.rand(self.batch_size, self.enc_dim)
-                z_ = torch.FloatTensor(self.batch_size, self.enc_dim).normal_(0.0, 1.0)
+                #--Make Laten Space--#
+                z_ = torch.rand(self.batch_size, self.enc_dim)
+                #z_ = torch.FloatTensor(self.batch_size, self.enc_dim).normal_(0.0, 1.0)
 
 
                 if self.gpu_mode:
-                    x_, z_, y_, one_hot_vector_, class_label_ = Variable(x_.cuda()), Variable(z_.cuda()), Variable(y_.cuda()), Variable(one_hot_vector.cuda()), Variable(class_label.cuda())
+                    x_, z_, class_label_ = Variable(x_.cuda()), Variable(z_.cuda()), Variable(class_label.cuda())
                 else:
-                    x_, z_, y_, one_hot_vector_, class_label_ = Variable(x_), Variable(z_), Variable(y_), Variable(one_hot_vector), Variable(class_label)
+                    x_, z_, class_label_ = Variable(x_), Variable(z_), Variable(class_label)
 
 
-                #Update D_network
+
+                #----Update D_network----#
                 
                 self.D_optimizer.zero_grad()
-                D_real = self.D(y_)
-                #pdb.set_trace()
+                D_real, C_real = self.D(x_)
                 D_real_loss = self.BCE_loss(D_real, self.y_real_)
-                #C_real_loss = self.ML_loss(C_real, one_hot_vector_) # divided by self.num_cls
                 #C_real_loss = self.CE_loss(C_real, class_label_)
 
                 G_ = self.G(z_)
-                D_fake = self.D(G_)
+                D_fake, C_fake = self.D(G_)
                 D_fake_loss = self.BCE_loss(D_fake, self.y_fake_)
-                #C_fake_loss = self.ML_loss(C_fake, one_hot_vector_)
                 #C_fake_loss = self.CE_loss(C_fake, class_label_)
-
-
 
                 # gradient penalty
                 if self.gpu_mode:
-                    alpha = torch.rand(y_.size()).cuda()
+                    alpha = torch.rand(x_.size()).cuda()
                 else:
-                    alpha = torch.rand(y_.size())
+                    alpha = torch.rand(x_.size())
 
-                y_hat = Variable(alpha * y_.data + (1 - alpha) * G_.data, requires_grad=True)
+                x_hat = Variable(alpha * x_.data + (1 - alpha) * G_.data, requires_grad=True)
 
-                pred_hat = self.D(y_hat)
+                pred_hat, class_hat = self.D(x_hat)
                 if self.gpu_mode:
-                    gradients = grad(outputs=pred_hat, inputs=y_hat, grad_outputs=torch.ones(pred_hat.size()).cuda(),
+                    gradients = grad(outputs=pred_hat, inputs=x_hat, grad_outputs=torch.ones(pred_hat.size()).cuda(),
                                  create_graph=True, retain_graph=True, only_inputs=True)[0]
                 else:
-                    gradients = grad(outputs=pred_hat, inputs=y_hat, grad_outputs=torch.ones(pred_hat.size()),
+                    gradients = grad(outputs=pred_hat, inputs=x_hat, grad_outputs=torch.ones(pred_hat.size()),
                                      create_graph=True, retain_graph=True, only_inputs=True)[0]
 
                 gradient_penalty = self.lambda_ * ((gradients.view(gradients.size()[0], -1).norm(2, 1) - 1) ** 2).mean()
@@ -255,15 +247,16 @@ class GAN(object):
                     self.D_optimizer.step()
                
 
-                #Update G Network
+
+
+                #----Update G Network----#
                 for iG in range(4):
                     self.G_optimizer.zero_grad()
                 
                     G_ = self.G(z_)
-                    D_fake= self.D(G_)
+                    D_fake, C_fake= self.D(G_)
 
-                    GAN_loss = self.BCE_loss(D_fake, self.y_real_)
-                    #C_fake_loss = self.ML_loss(C_fake, one_hot_vector_)
+                    G_fake_loss = self.BCE_loss(D_fake, self.y_real_)
                     #C_fake_loss = self.CE_loss(C_fake, class_label_)
                     #G_recon_loss = self.MSE_loss(G_, y_)
                     #G_recon_loss = self.L1_loss(G_, y_)
@@ -271,9 +264,9 @@ class GAN(object):
                     num_wrong_fake = torch.sum(D_fake > 0.5)
                     G_acc = float(num_wrong_fake.data[0]) / self.batch_size
 
-                    G_loss = GAN_loss# + (C_fake_loss) + G_recon_loss*80
+                    G_loss = G_fake_loss #+C_fake_loss
                     if iG == 0:
-                        print("[E%03d]"%epoch,"G_loss : ", GAN_loss.data[0], "  D_loss : ", D_loss.data[0], "   D_acc : ", D_acc, "  G_acc : ", G_acc)
+                        print("[E%03d]"%epoch,"G_loss : ", G_loss.data[0], "  D_loss : ", D_loss.data[0], "   D_acc : ", D_acc, "  G_acc : ", G_acc)
                         self.train_hist['G_loss'].append(G_loss.data[0])
                 
                     G_loss.backward()
@@ -281,31 +274,10 @@ class GAN(object):
                     
                     
 
-
-                if iB%100 == 0 and epoch>100 and epoch%50 == 0:
-                    self.G.eval()
-                    #self.G_origin.eval()
-
-                    tot_num_samples = min(self.sample_num, self.batch_size)
-                    image_frame_dim = int(np.floor(np.sqrt(tot_num_samples)))
-                    
-                    save_path = './result_gan/'
-	
-                    sample_G = self.G(z_)#self.G_origin(x_, z_)s
-                    if self.gpu_mode:
-                        sample_G = sample_G.cpu().data.numpy().transpose(0,2,3,1)
-                        gt = y_.cpu().data.numpy().transpose(0,2,3,1)
-                    else:
-                        sampel_G = sample_G.data.numpy().transpose(0,2,3,1)
-                        gt = y_.data.numpy().transpose(0,2,3,1)
-
-                   #We can check with or without Encoder output at here ex) self.G.Dec(z_) vs self.G(x_,z_)
-                    utils.save_images(sample_G[:image_frame_dim * image_frame_dim, :, :, :], [image_frame_dim, image_frame_dim],save_path+ '_E%03d'%epoch + '_I%03d'%iB + '.png')
-                    utils.save_images(gt[:image_frame_dim * image_frame_dim, :, :, :], [image_frame_dim, image_frame_dim],save_path +'GT_E%03d'%epoch + '_I%03d'%iB + '.png')
-                    utils.loss_plot(self.train_hist, save_path)
-                    self.save()
-
-                    self.G.train()
+            #---- Check train result ----#
+            self.train_hist['per_epoch_time'].append(time.time()-epoch_start_time)
+            self.visualize_results((epoch+1))
+            #We can check with or without Encoder output at here ex) self.G.Dec(z_) vs self.G(x_,z_)
                     
         self.train_hist['total_time'].append(time.time() - start_time)
         print("Avg one epoch time: %.2f, total %d epochs time: %.2f" % (np.mean(self.train_hist['per_epoch_time']),
@@ -313,6 +285,33 @@ class GAN(object):
         print("Training finish!... save training results")
 
         self.save()
+
+    def visualize_results(self, epoch, fix=True):
+        self.G.eval()
+        if not os.path.exists(self.result_dir + '/' + self.dataset + '/' + self.model_name):
+            os.makedirs(self.result_dir + '/' + self.dataset + '/' + self.model_name)
+		
+        tot_num_samples = min(self.sample_num, self.batch_size)
+        image_frame_dim = int(np.floor(np.sqrt(tot_num_samples)))
+
+        if fix:
+            """ fixed noise """
+            samples = self.G(self.sample_z_)
+        else:
+            """ random noise """
+            if self.gpu_mode:
+                sample_z_ = Variable(torch.rand((self.batch_size, self.enc_dim)).cuda(), volatile=True)
+            else:
+                sample_z_ = Variable(torch.rand((self.batch_size, self.enc_dim)), volatile=True)
+            samples = self.G(sample_z_)
+
+        if self.gpu_mode:
+            samples = samples.cpu().numpy().transpose(0, 2, 3, 1)
+        else:
+            samples = samples.numpy().transpose(0, 2, 3, 1)
+
+        utils.save_images(samples[:image_frame_dim*image_frame_dim,:,:,:], [image_frame_dim, image_frame_dim], self.result_dir+'/'+self.dataset+'/'+self.model_name+'_epoch%03d'%epoch+'.png')
+
 
     def save(self):
         save_dir = os.path.join(self.save_dir, self.dataset, self.model_name)
@@ -332,7 +331,4 @@ class GAN(object):
         self.G.load_state_dict(torch.load(os.path.join(save_dir, self.model_name + '_G.pkl')))
         self.D.load_state_dict(torch.load(os.path.join(save_dir, self.model_name + '_D.pkl')))
 
-
-A=GAN()
-A.train()
 
