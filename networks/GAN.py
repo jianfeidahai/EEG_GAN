@@ -311,9 +311,9 @@ class GAN(object):
             samples = self.G(sample_z_)
 
         if self.gpu_mode:
-            samples = samples.cpu().numpy().transpose(0, 2, 3, 1)
+            samples = samples.cpu().data.numpy().transpose(0, 2, 3, 1)
         else:
-            samples = samples.numpy().transpose(0, 2, 3, 1)
+            samples = samples.numpy().data.transpose(0, 2, 3, 1)
 
         utils.save_images(samples[:image_frame_dim*image_frame_dim,:,:,:], [image_frame_dim, image_frame_dim], self.result_dir+'/'+self.dataset+'/'+self.model_name+'_epoch%03d'%epoch+'.png')
 
