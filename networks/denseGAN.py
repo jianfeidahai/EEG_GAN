@@ -139,14 +139,14 @@ class denseGAN(object):
         self.log_dir = args.log_dir
         self.multi_gpu = args.multi_gpu
         '''
-        self.model_name = args.gan_type
+        self.model_name = args.gan_type+args.comment
         self.sample_num = 128
         self.gpu_mode = True#args.gpu_mode
         self.num_workers = 0#args.num_workers
-        self.beta1 = 0.5 #args.beta1
-        self.beta2 = 0.999 #args.beta2
-        self.lrG = 0.0002#args.lrG
-        self.lrD = 0.00001#0.0002 is good at single sample but many class is better 0.00005 #args.lrD
+        self.beta1 = args.beta1
+        self.beta2 = args.beta2
+        self.lrG = args.lrG
+        self.lrD = args.lrD
         self.type = "train"
         self.lambda_ = 0.25
         self.n_critic = 5

@@ -122,17 +122,17 @@ class GAN(object):
         self.log_dir = args.log_dir
         self.multi_gpu = args.multi_gpu
         '''
-        self.model_name = args.gan_type
+        self.model_name = args.gan_type+args.comment
         self.sample_num = 128
         self.gpu_mode = True#args.gpu_mode
         self.num_workers = 0#args.num_workers
-        self.beta1 = 0.5 #args.beta1
-        self.beta2 = 0.999 #args.beta2
-        self.lrG = 0.0002#args.lrG
-        self.lrD = 0.00001#0.0002 is good at single sample but many class is better 0.00005 #args.lrD
+        self.beta1 = args.beta1
+        self.beta2 = args.beta2
+        self.lrG = args.lrG
+        self.lrD = args.lrD
         self.type = "train"
         self.lambda_ = 0.25
-        self.n_critic = 5
+        self.n_critic = 1
 
         #load dataset
         self.data_loader = DataLoader(utils.ImageNet(root_dir = '../../ImageNet/ILSVRC/Data/DET',transform=transforms.Compose([transforms.Scale(100), transforms.RandomCrop(64),  transforms.ToTensor()]),_type=self.type),
@@ -170,7 +170,7 @@ class GAN(object):
         self.train_hist['G_loss'] = []
         self.train_hist['per_epoch_time'] = []
         self.train_hist['total_time'] = []
-
+        
         if self.gpu_mode:
             self.y_real_, self.y_fake_ = Variable(torch.ones(self.batch_size, 1).cuda()), Variable(torch.zeros(self.batch_size, 1).cuda())
         else:
@@ -251,7 +251,7 @@ class GAN(object):
 
 
                 #----Update G Network----#
-                for iG in range(4):
+                for iG in range(self.n_critic):
                     self.G_optimizer.zero_grad()
                 
                     G_ = self.G(z_)
