@@ -149,7 +149,7 @@ class denseGAN(object):
         self.lrD = args.lrD
         self.type = "train"
         self.lambda_ = 0.25
-        self.n_critic = 5
+        self.n_critic = 1
 
         #load dataset
         self.data_loader = DataLoader(utils.ImageNet(root_dir = '../../ImageNet/ILSVRC/Data/DET',transform=transforms.Compose([transforms.Scale(100), transforms.RandomCrop(64),  transforms.ToTensor()]),_type=self.type),
@@ -268,7 +268,7 @@ class denseGAN(object):
 
 
                 #----Update G Network----#
-                for iG in range(4):
+                for iG in range(self.n_critic):
                     self.G_optimizer.zero_grad()
                 
                     G_ = self.G(z_)
