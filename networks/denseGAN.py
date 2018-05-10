@@ -26,29 +26,37 @@ class Generator(nn.Module):
             # 4
             nn.Conv2d(self.input_dim, 512, 4, 1, 3, bias=False),
             nn.InstanceNorm2d(512, affine=True),
-            #nn.BatchNorm2d(512),
-            nn.ReLU(),
+            nn.LeakyReLU(0.2),
 
             # 8
             nn.Upsample(scale_factor=2, mode='nearest'),
             nn.Conv2d(512, 256, 3, 1, 1, bias=False),
             nn.InstanceNorm2d(256, affine=True),
-            #nn.BatchNorm2d(256),
-            nn.ReLU(),
+            nn.LeakyReLU(0.2),
+            
+            nn.Conv2d(256, 256, 3, 1, 1, bias=False),
+            nn.InstanceNorm2d(256, affine=True),
+            nn.LeakyReLU(0.2),
 
             # 16
             nn.Upsample(scale_factor=2, mode='nearest'),
             nn.Conv2d(256, 128, 3, 1, 1, bias=False),
             nn.InstanceNorm2d(128, affine=True),
-            #nn.BatchNorm2d(128),
-            nn.ReLU(),
+            nn.LeakyReLU(0.2),
+
+            nn.Conv2d(128, 128, 3, 1, 1, bias=False),
+            nn.InstanceNorm2d(128, affine=True),
+            nn.LeakyReLU(0.2),
 
             # 32
             nn.Upsample(scale_factor=2, mode='nearest'),
             nn.Conv2d(128, 64, 3, 1, 1, bias=False),
             nn.InstanceNorm2d(64, affine=True),
-            #nn.BatchNorm2d(64),
-            nn.ReLU(),
+            nn.LeakyReLU(0.2),
+
+            nn.Conv2d(64, 64, 3, 1, 1, bias=False),
+            nn.InstanceNorm2d(64, affine=True),
+            nn.LeakyReLU(0.2),
 
             # 64
             nn.Upsample(scale_factor=2, mode='nearest'),
@@ -71,23 +79,32 @@ class Discriminator(nn.Module):
         self.conv = nn.Sequential(
             nn.Conv2d(self.input_dim, 32, 4, 2, 1, bias=False), # 64 -> 32
             nn.InstanceNorm2d(32, affine=True),
-            #nn.BatchNorm2d(32),
             nn.LeakyReLU(0.2),
 
-            nn.Conv2d(32, 64, 4, 2, 1, bias=False),  # 32 -> 16
+            nn.Conv2d(32, 64, 3, 1, 1, bias=False),  # 32 -> 16
             nn.InstanceNorm2d(64, affine=True),
-            #nn.BatchNorm2d(64),
             nn.LeakyReLU(0.2),
+            nn.Conv2d(64, 64, 3, 1, 1, bias=False),
+            nn.InstanceNorm2d(64, affine=True),
+            nn.LeakyReLU(0.2),
+            nn.AvgPool2d(kernel_size=2),
 
-            nn.Conv2d(64, 128, 4, 2, 1, bias=False),  # 16 -> 8
+
+            nn.Conv2d(64, 128, 3, 1, 1, bias=False),  # 16 -> 8
             nn.InstanceNorm2d(128, affine=True),
-            #nn.BatchNorm2d(128),
             nn.LeakyReLU(0.2),
+            nn.Conv2d(128, 128, 3, 1, 1, bias=False),
+            nn.InstanceNorm2d(128, affine=True),
+            nn.LeakyReLU(0.2),
+            nn.AvgPool2d(kernel_size=2),
 
-            nn.Conv2d(128, 256, 4, 2, 1, bias=False),  # 8 -> 4
+            nn.Conv2d(128, 256, 3, 1, 1, bias=False),  # 8 -> 4
             nn.InstanceNorm2d(256, affine=True),
-            #nn.BatchNorm2d(256),
             nn.LeakyReLU(0.2),
+            nn.Conv2d(256, 256, 3, 1, 1, bias=False),
+            nn.InstanceNorm2d(256, affine=True),
+            nn.LeakyReLU(0.2),
+            nn.AvgPool2d(kernel_size=2),
         )
 
         self.convCls = nn.Sequential(
@@ -108,7 +125,7 @@ class Discriminator(nn.Module):
 
         return fGAN, fcls
 
-class GAN(object):
+class denseGAN(object):
     def __init__(self, args):
         #parameters
         self.batch_size = 128 #args.batch_size
