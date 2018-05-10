@@ -282,6 +282,7 @@ class GAN(object):
             #---- Check train result ----#
             self.train_hist['per_epoch_time'].append(time.time()-epoch_start_time)
             self.visualize_results((epoch+1))
+            utils.loss_plot(self.train_hist, os.path.join(self.result_dir, self.dataset, self.model_name), self.model_name)
             #We can check with or without Encoder output at here ex) self.G.Dec(z_) vs self.G(x_,z_)
                     
         self.train_hist['total_time'].append(time.time() - start_time)
