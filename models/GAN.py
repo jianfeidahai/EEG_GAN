@@ -138,8 +138,7 @@ class GAN(object):
         self.n_critic = 5
 
         #load dataset
-        self.data_loader = DataLoader(utils.ImageNet(transform2=transforms.Compose([transforms.Scale(64), transforms.RandomCrop(64),  transforms.ToTensor()]),
-            transform1=transforms.Compose([transforms.ToTensor()]), type_=self.type),
+        self.data_loader = DataLoader(utils.ImageNet(root_dir = '../../ImageNet/ILSVRC/Data/DET',transform=transforms.Compose([transforms.Scale(100), transforms.RandomCrop(64),  transforms.ToTensor()]),_type=self.type),
                                       batch_size=self.batch_size, shuffle=True, num_workers=self.num_workers)
         self.enc_dim = 100 # dimension of output from Encoder
         self.num_cls = self.data_loader.dataset.num_cls # number of class ImageNet
@@ -187,10 +186,8 @@ class GAN(object):
             #self.G.train()
             self.G.train()
             epoch_start_time = time.time()
-            for iB, (x_, y_, labels, one_hot_vector, class_label) in enumerate(self.data_loader):
-                #print()
-                #print(x_.shape, y_.shape)
-
+            for iB, (x_, class_label) in enumerate(self.data_loader):
+                pdb.set_trace()
                 if iB == self.data_loader.dataset.__len__() // self.batch_size:
                     break
 
