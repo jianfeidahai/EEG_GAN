@@ -151,11 +151,15 @@ class denseGAN(object):
         self.lambda_ = 0.25
         self.n_critic = args.n_critic
 
+        self.enc_dim = 300
+        self.num_cls = 10
+
+
         #load dataset
         self.data_loader = DataLoader(utils.ImageNet(root_dir = '../../ImageNet/ILSVRC/Data/DET',transform=transforms.Compose([transforms.Scale(100), transforms.RandomCrop(64),  transforms.ToTensor()]),_type=self.type),
                                       batch_size=self.batch_size, shuffle=True, num_workers=self.num_workers)
-        self.enc_dim = 300 # dimension of output from Encoder
-        self.num_cls = self.data_loader.dataset.num_cls # number of class ImageNet
+        
+        #self.num_cls = self.data_loader.dataset.num_cls # number of class ImageNet
 
         #networks init
         self.G = Generator()

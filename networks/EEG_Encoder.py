@@ -52,4 +52,29 @@ class EEG_Encoder(object):
 		#parameters
 		self.batch_size = args.batch_size
 		self.epoch = args.epoch
+		self.save_dir = args.save_dir
+		self.result_dir = args.result_dir
+		self.dataset = 'EEG_ImageNet'#args.dataset
+		self.dataroot_dir = '../../eegImagenet/mindbigdata-imagenet-in-v1.0/MindBigData-Imagenet-v1.0-Imgs'
+		self.model_name = args.gan_type + args.comment
+		self.sample_num = 128 #args.sample_num
+		self.gpu_mode = args.gpu_mode
+		self.num_workers = args.num_workers
+		self.beta1 = args.beta1
+		self.beta2 = args.beta2
+		self.lrG = args.lrG
+		self.lrD = args.lrD
+		self.lrE = args.lrD
+		self.type = 'train'
+		self.lambda_ = 0.25
+		self.n_critic = args.n_critic
+
+		#load dataset
+		self.data_loader = DataLoader(utils.EEG_ImageNet(root_dir = self.dataroot_dir,transform=transforms.Compose([transforms.Scale(100), transforms.RandomCrop(64), transforms.ToTensor()]),_type = self.type), batch_size=self.batch_size, shuffle=True, num_workers=self.num_workers)
+		self.enc_dim = 300
+		self.num_cls = self.data_loader.dataset.num_cls
+
+		self.E = Encoder()
+
+		self.E_optimizer = optim.Adam(self.E.parameters(), lr=self.lrE, betas=(self.beta1, self.beta2))
 

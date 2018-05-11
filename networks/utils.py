@@ -14,12 +14,12 @@ import pdb
 from itertools import islice
 
 class ImageNet(Dataset):
-	def __init__(self, root_dir, transform = None, _type = None):
+	def __init__(self, root_dir, transform = None, _type = None, num_cls = None):
 		self.filenames = []
 		self.root_dir = root_dir#../../../ImageNet/ILSVRC/Data/Det
 		self.transform = transform
 		self.type = _type
-		self.num_cls = 100
+		self.num_cls = num_cls
 
 		print('Loading ImageNet metadata...')
 		sys.stdout.flush()
