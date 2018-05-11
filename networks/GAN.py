@@ -132,7 +132,7 @@ class GAN(object):
         self.lrD = args.lrD
         self.type = "train"
         self.lambda_ = 0.25
-        self.n_critic = 1
+        self.n_critic = args.n_critic
 
         #load dataset
         self.data_loader = DataLoader(utils.ImageNet(root_dir = '../../ImageNet/ILSVRC/Data/DET',transform=transforms.Compose([transforms.Scale(100), transforms.RandomCrop(64),  transforms.ToTensor()]),_type=self.type),
