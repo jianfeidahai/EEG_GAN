@@ -1,6 +1,7 @@
 import argparse, os, pickle
 from networks.GAN import GAN
 from networks.denseGAN import denseGAN
+from networks.ACGAN import ACGAN
 import pdb
 
 def str2bool(v):
@@ -16,7 +17,7 @@ def parse_args():
 	desc = "Pytorch implementation of GAN collections"
 	parser = argparse.ArgumentParser(description=desc)
 
-	parser.add_argument('--gan_type', type=str, default='GAN', choices=['GAN', 'denseGAN'], help='The type of GAN')#, required=True)
+	parser.add_argument('--gan_type', type=str, default='GAN', choices=['GAN', 'denseGAN', 'ACGAN'], help='The type of GAN')#, required=True)
 	parser.add_argument('--dataset', type=str, default='ImageNet', choices=['mnist', 'fashion-mnist', 'celebA', 'MultiPie','miniPie', 'CASIA-WebFace','ShapeNet', 'Bosphorus', 'ImageNet'], help='The name of dataset')
 	parser.add_argument('--dataroot_dir', type=str, default='data', help='root path of data')
 	parser.add_argument('--epoch', type=int, default=25, help='The number of epochs to run')
@@ -100,6 +101,8 @@ def main():
 		gan = GAN(opts)
 	elif opts.gan_type == 'denseGAN':
 		gan = denseGAN(opts)
+	elif opts.gan_type == 'ACGAN':
+		gan = ACGAN(opts)
 	else:
 		raise Exception("[!] There is no option for " + opts.gan_type)
 
