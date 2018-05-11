@@ -70,7 +70,17 @@ class ImageNet(Dataset):
 
 
 
-#class EEG_ImageNet(Dataset): # We need dataloader for pair eeg-ImageNet
+class EEG_ImageNet(Dataset):
+	def __init__(self, root_dir, transform = None, _type = None):
+		self.EEG_filenames=[]
+		self.root_dir = root_dir #../../../EEG~
+		self.transform = transform
+		self.type = _type #train or test
+		
+		print('Loading EEG-ImageNet metadata...')
+
+
+
 
 
 def print_network(net):

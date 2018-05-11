@@ -108,7 +108,7 @@ class Discriminator(nn.Module):
 
         return fGAN, fcls
 
-class GAN(object):
+class ACGAN(object):
     def __init__(self, args):
         #parameters
         self.batch_size = 128 #args.batch_size
