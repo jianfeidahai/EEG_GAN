@@ -38,6 +38,7 @@ def parse_args():
 	parser.add_argument('--n_critic', type=int, default=1, help='n_critic')
 	parser.add_argument('--n_gen', type=int, default=1, help='n_gen')
 	parser.add_argument('--nDaccAvg', type=int, default=5, help='number of batches for moving averaging D_acc')
+	parser.add_argument('--use_gp',type=str2bool, default=True)
 
 	# below arguments are for eval mode
 	parser.add_argument('--type', type=str, default='train', help='train or test')

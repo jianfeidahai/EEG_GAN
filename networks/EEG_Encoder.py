@@ -36,13 +36,13 @@ class Encoder(nn.Module):
 			nn.ReLU(),
 
 			nn.Conv2d(512, self.output_dim, 4, 2, 1, bias=True),
-			nn.Sigmoid(),
+			#nn.Sigmoid(),
 		)
 
 		utils.initialize_weights(self)
 
 	def forward(self, input):
-		x = self.conv(input)
+		x = self.conv(input).squeeze(3).squeeze(2)
 		return x
 
 
@@ -69,12 +69,63 @@ class EEG_Encoder(object):
 		self.lambda_ = 0.25
 		self.n_critic = args.n_critic
 
+		self.enc_dim = 300
+		self.num_cls = 100
+
 		#load dataset
 		self.data_loader = DataLoader(utils.EEG_ImageNet(root_dir = self.dataroot_dir,transform=transforms.Compose([transforms.Scale(100), transforms.RandomCrop(64), transforms.ToTensor()]),_type = self.type), batch_size=self.batch_size, shuffle=True, num_workers=self.num_workers)
-		self.enc_dim = 300
-		self.num_cls = self.data_loader.dataset.num_cls
+		
+		#self.num_cls = self.data_loader.dataset.num_cls
 
 		self.E = Encoder()
 
 		self.E_optimizer = optim.Adam(self.E.parameters(), lr=self.lrE, betas=(self.beta1, self.beta2))
+
+		if self.gpu_mode:
+			self.E = self.E.cuda()
+			self.CE_loss = nn.CrossEntropyLoss().cuda()
+		else:
+			self.CE_loss = nn.CrossEntropyLoss()
+	
+
+	def train(self):
+		self.train_hist = {}
+		self.train_hist['E_loss'] = []
+		self.train_hist['per_epoch_time']=[]
+		self.train_hist['total_time']=[]
+
+		#train
+		self.E.train()
+		start_time = time.time()
+		for epoch in range(self.epoch):
+			for iB, x_, class_label in enumerate(self.data_loader):
+				if iB == self.data_loader.dataset.__len__() // self.batch_size:
+					break
+
+			#--Make Latent Space--#
+			z = torch.rand(self.batch_size, self.enc_dim)
+			#z = torch.FloatTensor(self.batch_size, self.enc_dim).normal_(0.0, 1.0)
+
+			if self.gpu_mode:
+				x_, z_, class_label_ = Variable(x_.cuda()), Vairable(z_.cuda()), Variable(class_label.cuda())
+			else:
+				x_, z_, class_label_ = Variable(x_), Variable(z_), Variable(class_label)
+
+
+			#----Update E_network----#
+			self.E_optimizer.zero_grad()
+			E_real = self.E(x_)
+			E_loss = self.CE_loss(E_real, class_label_)
+			self.train_hist['E_loss'].append(E_loss.data[0])
+
+			E_loss.backward()
+			self.E_optimizer.step()
+
+			print("[E%03d]"%epoch, "E_loss : ", E_loss.data[0])
+
+		#---check train result ----#
+		self.train_hist['per_epoch_time'].append(time.time()-epoch_start_time)
+		
+
+
 

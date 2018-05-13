@@ -133,7 +133,7 @@ class GAN(object):
         self.type = "train"
         self.lambda_ = 0.25
         self.n_critic = args.n_critic
-
+        self.use_gp = args.use_gp
         self.enc_dim = 300
         self.num_cls = 10
 
@@ -234,8 +234,10 @@ class GAN(object):
 
 
 
-
-                D_loss = D_real_loss + D_fake_loss + gradient_penalty
+                if self.use_gp:
+                    D_loss = D_real_loss + D_fake_loss + gradient_penalty
+                else:
+                    D_loss = D_real_loss + D_fake_loss
                 self.train_hist['D_loss'].append(D_loss.data[0])
                 
                 num_correct_real = torch.sum(D_real > 0.5)

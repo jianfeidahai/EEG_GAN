@@ -235,7 +235,6 @@ class ACGAN(object):
 
 
 
-
                 D_loss = D_real_loss + D_fake_loss + gradient_penalty + C_fake_loss + C_real_loss
                 self.train_hist['D_loss'].append(D_loss.data[0])
                 
