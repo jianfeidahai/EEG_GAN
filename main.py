@@ -4,6 +4,8 @@ from networks.denseGAN import denseGAN
 from networks.ACGAN import ACGAN
 from networks.CGAN import CGAN
 from networks.EEG_GAN import EEG_GAN
+from networks.EEG_GAN_SN import EEG_GAN_SN
+from networks.EEG_EncGAN import EEG_EncGAN
 import pdb
 
 def str2bool(v):
@@ -19,7 +21,7 @@ def parse_args():
 	desc = "Pytorch implementation of GAN collections"
 	parser = argparse.ArgumentParser(description=desc)
 
-	parser.add_argument('--gan_type', type=str, default='GAN', choices=['GAN', 'denseGAN', 'CGAN', 'ACGAN', 'EEG_GAN'], help='The type of GAN')#, required=True)
+	parser.add_argument('--gan_type', type=str, default='GAN', choices=['GAN', 'denseGAN', 'CGAN', 'ACGAN', 'EEG_GAN', 'EEG_GAN_SN', 'EEG_EncGAN'], help='The type of GAN')#, required=True)
 	parser.add_argument('--dataset', type=str, default='ImageNet', choices=['mnist', 'fashion-mnist', 'celebA', 'MultiPie','miniPie', 'CASIA-WebFace','ShapeNet', 'Bosphorus', 'ImageNet'], help='The name of dataset')
 	parser.add_argument('--dataroot_dir', type=str, default='data', help='root path of data')
 	parser.add_argument('--epoch', type=int, default=25, help='The number of epochs to run')
@@ -114,6 +116,10 @@ def main():
 		gan = EEG_GAN(opts)
 	elif opts.gan_type == 'CGAN':
 		gan = CGAN(opts)
+	elif opts.gan_type == 'EEG_GAN_SN':
+		gan = EEG_GAN_SN(opts)
+	elif opts.gan_type == 'EEG_EncGAN':
+		gan = EEG_EncGAN(opts)
 	else:
 		raise Exception("[!] There is no option for " + opts.gan_type)
 

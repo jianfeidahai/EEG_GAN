@@ -20,23 +20,23 @@ class Encoder(nn.Module):
 		self.output_dim = 50
 
 		self.conv = nn.Sequential(
-			nn.Conv2d(self.input_dim, 64, 3, 4, 2, bias=True),
-			nn.BatchNorm2d(64),
+			SpectralNorm(nn.Conv2d(self.input_dim, 64, 3, 4, 2, bias=True)),
+			#nn.BatchNorm2d(64),
 			#nn.InstanceNorm2d(64, affine=True),
 			nn.ReLU(),
 
-			nn.Conv2d(64, 128, 4, 2, 1, bias=True),
-			nn.BatchNorm2d(128),
+			SpectralNorm(nn.Conv2d(64, 128, 4, 2, 1, bias=True)),
+			#nn.BatchNorm2d(128),
 			#nn.InstanceNorm2d(128, affine=True),
 			nn.ReLU(),
 
-			nn.Conv2d(128, 256, 4, 2, 1, bias=True),
-			nn.BatchNorm2d(256),
+			SpectralNorm(nn.Conv2d(128, 256, 4, 2, 1, bias=True)),
+			#nn.BatchNorm2d(256),
 			#nn.InstanceNorm2d(256, affine=True),
 			nn.ReLU(),
 
-			nn.Conv2d(256, 512, 4, 2, 1, bias=True),
-			nn.BatchNorm2d(512),
+			SpectralNorm(nn.Conv2d(256, 512, 4, 2, 1, bias=True)),
+			#nn.BatchNorm2d(512),
 			#nn.InstanceNorm2d(512, affine=True),
 			nn.ReLU(),
 
@@ -44,7 +44,7 @@ class Encoder(nn.Module):
 			#nn.Sigmoid(),
 		)
 
-		utils.initialize_weights(self)
+		#utils.initialize_weights(self)
 
 	def forward(self, input):
 		x = self.conv(input).squeeze(3).squeeze(2)
@@ -162,7 +162,7 @@ class Generator(nn.Module):
 		self.Enc = Encoder()
 		self.Dec = Decoder()
 
-		utils.initialize_weights(self)
+		#utils.initialize_weights(self)
 
 	def forward(self, eeg, spc, z):
 		eeg_ = self.GRU(eeg)
@@ -179,23 +179,23 @@ class Discriminator(nn.Module):
 
 		self.conv = nn.Sequential(
 			#64->32
-			nn.Conv2d(self.input_dim, 32, 4, 2, 1, bias=False),
-			nn.BatchNorm2d(32),
+			SpectralNorm(nn.Conv2d(self.input_dim, 32, 4, 2, 1, bias=False)),
+			#nn.BatchNorm2d(32),
 			nn.LeakyReLU(),
 
 			#32->16
-			nn.Conv2d(32, 64, 4, 2, 1, bias=False),
-			nn.BatchNorm2d(64),
+			SpectralNorm(nn.Conv2d(32, 64, 4, 2, 1, bias=False)),
+			#nn.BatchNorm2d(64),
 			nn.LeakyReLU(0.2),
 
 			#16->8
-			nn.Conv2d(64, 128, 4, 2, 1, bias=False),
-			nn.BatchNorm2d(128),
+			SpectralNorm(nn.Conv2d(64, 128, 4, 2, 1, bias=False)),
+			#nn.BatchNorm2d(128),
 			nn.LeakyReLU(0.2),
 
 			#8->4
-			nn.Conv2d(128, 256, 4, 2, 1, bias=False),
-			nn.BatchNorm2d(256),
+			SpectralNorm(nn.Conv2d(128, 256, 4, 2, 1, bias=False)),
+			#nn.BatchNorm2d(256),
 			nn.LeakyReLU(0.2),
 		)
 
@@ -209,7 +209,7 @@ class Discriminator(nn.Module):
 		)
 
 
-		utils.initialize_weights(self)
+		#utils.initialize_weights(self)
 
 	def forward(self, y):
 		feature = self.conv(y)
@@ -219,7 +219,10 @@ class Discriminator(nn.Module):
 		return fGAN, fcls
 
 
-class EEG_GAN(object):
+
+
+
+class EEG_GAN_SN(object):
 	def __init__(self, args):
 		#parameters
 		self.batch_size = args.batch_size
@@ -232,7 +235,7 @@ class EEG_GAN(object):
 		self.model_name = args.gan_type + args.comment
 		self.sample_num = args.sample_num
 		self.gpu_mode = args.gpu_mode
-		self.num_workers = args.num_workers
+		self.num_workers = 0# test for data_loader  args.num_workers
 		self.beta1 = args.beta1
 		self.beta2 = args.beta2
 		self.lrG = args.lrG
@@ -242,7 +245,7 @@ class EEG_GAN(object):
 		self.lambda_ = 0.25
 		self.n_critic = args.n_critic
 		self.d_trick = args.d_trick
-		self.use_recon = True
+		self.use_recon = False
 
 		self.enc_dim = 100
 #		self.num_cls = 100
@@ -302,7 +305,7 @@ class EEG_GAN(object):
 				else:
 					x_, z_, class_label_, eeg_, spc_ = Variable(x), Variable(z_), Variable(class_label), Variable(eeg), Variable(spc)
 
-
+				
 				#----Update D_network----#
 				self.D_optimizer.zero_grad()
 				D_real, C_real = self.D(x_)

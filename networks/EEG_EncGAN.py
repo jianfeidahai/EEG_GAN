@@ -41,7 +41,7 @@ class Encoder(nn.Module):
 			nn.ReLU(),
 
 			nn.Conv2d(512, self.output_dim, 4, 2, 1, bias=True),
-			#nn.Sigmoid(),
+			nn.Sigmoid(),
 		)
 
 		utils.initialize_weights(self)
@@ -50,59 +50,6 @@ class Encoder(nn.Module):
 		x = self.conv(input).squeeze(3).squeeze(2)
 		return x
 
-class GRU_Encoder(nn.Module):
-	def __init__(self, num_cls):
-		super(GRU_Encoder, self).__init__()
-		self.hidden_dim = 20
-		self.input_dim = 5
-		self.output_dim = 50#num_cls # class_num or feature dimension(for concat)
-	
-		self.GRU = nn.GRU(self.input_dim, self.hidden_dim, num_layers = 1,  batch_first = True, dropout=0.5)
-		self.fc = nn.Sequential(
-			nn.Linear(self.hidden_dim , self.output_dim),
-			nn.Sigmoid()
-		)
-		#utils.initialize_weights(self)
-
-	def forward(self, feature):
-
-		feature = feature.transpose(1,2)#dimension change : batch x time x dimension	
-		x, hidden = self.GRU(feature)
-		x = x.select(1, x.size(0)-1).contiguous()
-		x = x.view(-1, self.hidden_dim)
-		result = self.fc(x)
-		return result
-
-
-class LSTM(nn.Module):
-	#I should divide one channel each and pass through LSTM and lst concat each channel(dim)
-	def __init__(self, batch_size):
-		super(LSTM, self).__init__()
-		self.hidden_dim = 50
-		self.embedding_dim = 32
-		self.input_dim = 5
-		self.output_dim = 10
-		self.batch_size = batch_size
-
-		self.embedding = nn.Embedding(self.input_dim, self.embedding_dim)
-		self.lstm = nn.LSTM(self.embedding_dim, self.hidden_dim)
-		self.hidden2label = nn.Linear(self.hidden_dim, self.output_dim)
-
-		self.hidden = self.init_hidden()
-	
-	def init_hidden(self):
-		h0 = Variable(torch.zeros(1, self.batch_size, self.hidden_dim).cuda())
-		c0 = Variable(torch.zeros(1, self.batch_size, self.hidden_dim).cuda())
-		return (h0, c0)
-
-	def forward(self, sentence):
-		pdb.set_trace()
-		embeds = self.embedding(sentence)
-		x = embeds.view(len(sentence), self.batch_size, -1)
-		lstm_out, self.hidden = self.lstm(x, self.hidden)
-		y  = self.hidden2label(lstm_out[-1])
-		return y
-
 class Decoder(nn.Module):
 	def __init__(self):
 		super(Decoder, self).__init__()
@@ -110,7 +57,7 @@ class Decoder(nn.Module):
 		self.output_dim = 3 
 
 		self.fc = nn.Sequential(
-			nn.Linear(200, self.input_dim)
+			nn.Linear(150, self.input_dim)
 		)
 
 		self.deconv = nn.Sequential(
@@ -146,8 +93,8 @@ class Decoder(nn.Module):
 		)
 		utils.initialize_weights(self)
 
-	def forward(self, z, gru, spc):
-		feature = torch.cat((z, gru, spc),1)
+	def forward(self, z, spc):
+		feature = torch.cat((z, spc),1)
 		x = self.fc(feature)
 		x = self.deconv(x.view(-1, self.input_dim, 1, 1))
 		return x
@@ -158,16 +105,14 @@ class Generator(nn.Module):
 		super(Generator, self).__init__()
 		self.num_cls = num_cls
 
-		self.GRU = GRU_Encoder(self.num_cls)
 		self.Enc = Encoder()
 		self.Dec = Decoder()
 
 		utils.initialize_weights(self)
 
-	def forward(self, eeg, spc, z):
-		eeg_ = self.GRU(eeg)
+	def forward(self, spc, z):
 		spc_ = self.Enc(spc)
-		result = self.Dec(z, eeg_, spc_)
+		result = self.Dec(z, spc_)
 
 		return result
 
@@ -219,7 +164,7 @@ class Discriminator(nn.Module):
 		return fGAN, fcls
 
 
-class EEG_GAN(object):
+class EEG_EncGAN(object):
 	def __init__(self, args):
 		#parameters
 		self.batch_size = args.batch_size
@@ -309,7 +254,7 @@ class EEG_GAN(object):
 				D_real_loss = self.BCE_loss(D_real, self.y_real_)
 				C_real_loss = self.CE_loss(C_real, class_label_)
 				
-				G_ = self.G(eeg_, spc_, z_)
+				G_ = self.G(spc_, z_)
 				D_fake, C_fake = self.D(G_)
 				D_fake_loss = self.BCE_loss(D_fake, self.y_fake_)
 				C_fake_loss = self.CE_loss(C_fake, class_label_)
@@ -350,7 +295,7 @@ class EEG_GAN(object):
 				#----Update G_network----#
 				for iG in range(self.n_critic):
 					self.G_optimizer.zero_grad()
-					G_ = self.G(eeg_, spc_, z_)
+					G_ = self.G(spc_, z_)
 					D_fake, C_fake = self.D(G_)
 					G_fake_loss = self.BCE_loss(D_fake, self.y_real_)
 					G_cls_loss = self.CE_loss(C_fake, class_label_)
@@ -386,7 +331,7 @@ class EEG_GAN(object):
 
 		if fix:
 			""" fixed noise """
-			samples = self.G(eeg, spc, z)
+			samples = self.G(spc, z)
 		
 		if self.gpu_mode:
 			samples = samples.cpu().data.numpy().transpose(0, 2, 3, 1)
