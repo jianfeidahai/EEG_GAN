@@ -243,6 +243,7 @@ class EEG_GAN(object):
 		self.type = 'train'
 		self.lambda_ = 0.25
 		self.n_critic = args.n_critic
+		self.d_trick = args.d_trick
 		self.use_recon = False
 
 		self.enc_dim = 100
@@ -318,31 +319,56 @@ class EEG_GAN(object):
 				D_ganloss = D_real_loss + D_fake_loss
 				D_clsloss = C_real_loss + C_fake_loss
 
-				D_loss = D_ganloss + D_clsloss
+				#gradient penalry
+				if self.gpu_mode:
+					alpha = torch.rand(x_.size()).cuda()
+				else:
+					alpha = torch.rand(x_.size())
+
+				x_hat = Variable(alpha * x_.data + (1-alpha)*G_.data, requires_grad=True)
+
+				pred_hat, class_hat = self.D(x_hat)
+				if self.gpu_mode:
+					gradients = grad(outputs=pred_hat, inputs=x_hat, grad_outputs=torch.ones(pred_hat.size()).cuda(), create_graph=True, retain_graph=True, only_inputs=True)[0]
+				else:
+					gradients = grad(outputs=pred_hat, inputs=x_hat, grad_outputs=torch.ones(pred_hat.size()), create_output=True, retain_graph = True, only_inputs=True)[0]
+
+				gradient_penalty = self.lambda_ *((gradients.view(gradients.size()[0], -1).norm(2,1) -1)**2).mean()
+
+				D_loss = D_ganloss + D_clsloss + gradient_penalty
 				self.train_hist['D_loss'].append(D_loss.data[0])
+				
+				num_correct_real = torch.sum(D_real > 0.5)
+				num_correct_fake = torch.sum(D_fake < 0.5)
+
+				D_acc = float(num_correct_real.data[0] + num_correct_fake.data[0]) / (self.batch_size*2)
 				D_loss.backward()
-				self.D_optimizer.step()
+				if self.d_trick:
+					if (D_acc < 0.8):
+						self.D_optimizer.step()
+				else:
+					self.D_optimizer.step()
 
 				#----Update G_network----#
-				self.G_optimizer.zero_grad()
-				G_ = self.G(eeg_, spc_, z_)
-				D_fake, C_fake = self.D(G_)
-				G_fake_loss = self.BCE_loss(D_fake, self.y_real_)
-				G_cls_loss = self.CE_loss(C_fake, class_label_)
+				for iG in range(self.n_critic):
+					self.G_optimizer.zero_grad()
+					G_ = self.G(eeg_, spc_, z_)
+					D_fake, C_fake = self.D(G_)
+					G_fake_loss = self.BCE_loss(D_fake, self.y_real_)
+					G_cls_loss = self.CE_loss(C_fake, class_label_)
 
-				if self.use_recon:
-					G_recon_loss = self.L1_loss(G_, x_)
-					G_loss = G_fake_loss + G_cls_loss + G_recon_loss*80
-				else:
-					G_loss = G_fake_loss + G_cls_loss
-
-				self.train_hist['G_loss'].append(G_loss.data[0])
-				G_loss.backward()
-				self.G_optimizer.step()
-
-
+					if self.use_recon:
+						G_recon_loss = self.L1_loss(G_, x_)
+						G_loss = G_fake_loss + G_cls_loss + G_recon_loss*80
+					else:
+						G_loss = G_fake_loss + G_cls_loss
+					if iG == (self.n_critic-1):
+						self.train_hist['G_loss'].append(G_loss.data[0])
+					G_loss.backward()
+					self.G_optimizer.step()
+				#---check train result ----#
 				if(iB % 100 == 0):
-					print('[E%03d]'%(epoch)+'D_loss : ', D_ganloss.data[0],' + ',D_clsloss.data[0], '  G_loss : ', G_fake_loss.data[0],' + ' , G_cls_loss.data[0])
+					print('[E%03d]'%(epoch)+'D_loss : ',D_loss.data[0],' = ', D_ganloss.data[0],' + ',D_clsloss.data[0], '  G_loss : ', G_fake_loss.data[0],' + ' , G_cls_loss.data[0], 'D_acc :', D_acc)
 					self.visualize_results(epoch, eeg_, spc_, z_, x_, iB)
 			#---check train result ----#
 			self.train_hist['per_epoch_time'].append(time.time()-epoch_start_time)
