@@ -2,6 +2,8 @@ import argparse, os, pickle
 from networks.GAN import GAN
 from networks.denseGAN import denseGAN
 from networks.ACGAN import ACGAN
+from networks.CGAN import CGAN
+from networks.EEG_GAN import EEG_GAN
 import pdb
 
 def str2bool(v):
@@ -17,12 +19,12 @@ def parse_args():
 	desc = "Pytorch implementation of GAN collections"
 	parser = argparse.ArgumentParser(description=desc)
 
-	parser.add_argument('--gan_type', type=str, default='GAN', choices=['GAN', 'denseGAN', 'ACGAN'], help='The type of GAN')#, required=True)
+	parser.add_argument('--gan_type', type=str, default='GAN', choices=['GAN', 'denseGAN', 'CGAN', 'ACGAN', 'EEG_GAN'], help='The type of GAN')#, required=True)
 	parser.add_argument('--dataset', type=str, default='ImageNet', choices=['mnist', 'fashion-mnist', 'celebA', 'MultiPie','miniPie', 'CASIA-WebFace','ShapeNet', 'Bosphorus', 'ImageNet'], help='The name of dataset')
 	parser.add_argument('--dataroot_dir', type=str, default='data', help='root path of data')
 	parser.add_argument('--epoch', type=int, default=25, help='The number of epochs to run')
 	parser.add_argument('--batch_size', type=int, default=64, help='The size of batch')
-	parser.add_argument('--test_sample_size', type=int, default=64, help='The number of samples to test')
+	parser.add_argument('--sample_num', type=int, default=64, help='The number of samples to test')
 	parser.add_argument('--save_dir', type=str, default='../models', help='Directory name to save the model')
 	parser.add_argument('--result_dir', type=str, default='../results', help='Directory name to save the generated images')
 	parser.add_argument('--log_dir', type=str, default='logs', help='Directory name to save training logs')
@@ -39,6 +41,10 @@ def parse_args():
 	parser.add_argument('--n_gen', type=int, default=1, help='n_gen')
 	parser.add_argument('--nDaccAvg', type=int, default=5, help='number of batches for moving averaging D_acc')
 	parser.add_argument('--use_gp',type=str2bool, default=True)
+	parser.add_argument('--latent_dim', type=int, default=300, help='latent space dimension, default : 300')
+	parser.add_argument('--sample', type=str, default='normal', choices=['normal', 'random'])
+	parser.add_argument('--num_cls', type=int, default=10)
+	parser.add_argument('--d_trick', type=str2bool, default=True)
 
 	# below arguments are for eval mode
 	parser.add_argument('--type', type=str, default='train', help='train or test')
@@ -104,6 +110,10 @@ def main():
 		gan = denseGAN(opts)
 	elif opts.gan_type == 'ACGAN':
 		gan = ACGAN(opts)
+	elif opts.gan_type == 'EEG_GAN':
+		gan = EEG_GAN(opts)
+	elif opts.gan_type == 'CGAN':
+		gan = CGAN(opts)
 	else:
 		raise Exception("[!] There is no option for " + opts.gan_type)
 

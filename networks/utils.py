@@ -12,6 +12,10 @@ from torch.utils.data import Dataset, DataLoader
 from PIL import Image
 import pdb
 from itertools import islice
+import pandas as pd
+from numpy import genfromtxt
+from collections import defaultdict
+
 
 class ImageNet(Dataset):
 	def __init__(self, root_dir, transform = None, _type = None, num_cls = None):
@@ -19,7 +23,7 @@ class ImageNet(Dataset):
 		self.root_dir = root_dir#../../../ImageNet/ILSVRC/Data/Det
 		self.transform = transform
 		self.type = _type
-		self.num_cls = num_cls
+		self.num_cls = num_cls+1
 
 		print('Loading ImageNet metadata...')
 		sys.stdout.flush()
@@ -29,12 +33,13 @@ class ImageNet(Dataset):
 		fname_cache = 'ImageNet_cache.txt'
 		if os.path.exists(fname_cache):
 			self.filenames = open(fname_cache).read().splitlines()
-			print('Already cache file exits! Load from here...')
+			print('Already cache file exists! Load from here...')
 		else:
 			if self.type == 'train':
 				path = os.path.join(root_dir, self.type,'ILSVRC2013_train')
 			else:
 				path = os.path.join(root_dir, self.type)
+			
 			self.filenames = [ os.path.join(dirpath,f) for _,( dirpath, dirnames,files) in zip(range(self.num_cls), os.walk(path)) for f in files if f.endswith('.JPEG')]
 			print('---Making cache_file.txt----')
 
@@ -76,8 +81,141 @@ class EEG_ImageNet(Dataset):
 		self.root_dir = root_dir #../../../EEG~
 		self.transform = transform
 		self.type = _type #train or test
+		self.Img_root_dir = '../../ImageNet/ILSVRC/Data/DET/train/ILSVRC2013_train'
+		self.Spc_root_dir = '../../eegImagenet/mindbigdata-imagenet-in-v1.0/MindBigData-Imagenet-v1.0-Imgs'
+
+		self.EEG_dic=defaultdict(list)
 		
+		self.EEG_filenames_train = []
+		self.EEG_filenames_test = []
+		self.Img_filenames_train = []
+		self.Img_filenames_test = []
+		self.Spc_filenames_train = []
+		self.Spc_filenames_test = []
+
+
 		print('Loading EEG-ImageNet metadata...')
+
+		fname_cache = 'EEG_cache.txt'
+		if os.path.exists(fname_cache):
+			self.EEG_filenames = open(fname_cache).read().splitlines()
+			print('Already cache file exists! Load from here...')
+		else:
+			if self.type == 'train':
+				path = root_dir
+			else:
+				path = root_dir
+
+			self.EEG_filenames = [os.path.join(dirpath, f) for (dirpath, dirnames, files) in os.walk(path) for f in files if f.endswith('csv')]
+			print('----MAking cache_file.txt----')
+			
+			with open(fname_cache, 'w') as f:
+				for fname in self.EEG_filenames:
+					f.write(fname+'\n')
+			print('Done! cached in {}'.format(fname_cache))
+				
+		fname_cache_eeg_train, fname_cache_eeg_test = './cache/EEG_cache_train.txt', './cache/EEG_cache_test.txt'
+		fname_cache_img_train, fname_cache_img_test = './cache/Img_cache_train.txt', './cache/Img_cache_test.txt'
+		fname_cache_spc_train, fname_cache_spc_test = './cache/Spc_cache_train.txt', './cache/Spc_cache_test.txt'
+		
+		if os.path.exists(fname_cache_eeg_train):
+			self.EEG_filenames_train = open(fname_cache_eeg_train).read().splitlines()
+			self.EEG_filenames_test = open(fname_cache_eeg_test).read().splitlines()
+			self.Img_filenames_train = open(fname_cache_img_train).read().splitlines()
+			self.Img_filenames_test = open(fname_cache_img_test).read().splitlines()
+			self.Spc_filenames_train = open(fname_cache_spc_train).read().splitlines()
+			self.Spc_filenames_test = open(fname_cache_spc_test).read().splitlines()
+			print('Already cache file exists! Load from here...')
+		else:		
+			for i, item in enumerate(self.EEG_filenames):
+				cls = os.path.basename(item).split('_')[3]
+				target = os.path.basename(item).split('_')[4]
+				self.EEG_dic[cls].append((item, target))
+		
+			for iB, key in enumerate(self.EEG_dic):
+				length = len(self.EEG_dic[key])
+				train_len = int(length*0.8)
+				for i in range(length):
+					basename = os.path.basename(self.EEG_dic[key][i][0]).split('.')[0]
+					e_path = self.EEG_dic[key][i][0]
+					s_path = os.path.join(self.Spc_root_dir, basename+'.png')
+					i_path = os.path.join(self.Img_root_dir, key, key+'_'+self.EEG_dic[key][i][1]+'.JPEG')
+					#pdb.set_trace()
+					if i <= train_len:
+						self.EEG_filenames_train.append(e_path)
+						self.Img_filenames_train.append(i_path)
+						self.Spc_filenames_train.append(s_path)
+					else:
+						self.EEG_filenames_test.append(e_path)
+						self.Img_filenames_test.append(i_path)
+						self.Spc_filenames_test.append(s_path)
+
+			with open(fname_cache_eeg_train, 'w') as f:
+				for fname in self.EEG_filenames_train:
+					f.write(fname+'\n')
+			with open(fname_cache_eeg_test, 'w') as f:
+				for fname in self.EEG_filenames_test:
+					f.write(fname+'\n')
+			with open(fname_cache_img_train, 'w') as f:
+				for fname in self.Img_filenames_train:
+					f.write(fname+'\n')
+			with open(fname_cache_img_test, 'w') as f:
+				for fname in self.Img_filenames_test:
+					f.write(fname+'\n')
+			with open(fname_cache_spc_train, 'w') as f:
+				for fname in self.Spc_filenames_train:
+					f.write(fname+'\n')
+			with open(fname_cache_spc_test, 'w') as f:
+				for fname in self.Spc_filenames_test:
+					f.write(fname+'\n')
+		
+			
+		
+		#get EEG csv file path
+		if self.type == 'train': 
+			self.cls = sorted(set([os.path.basename(f).split('_')[3] for f in self.EEG_filenames_train]))
+		else:
+			self.cls = sorted(set([os.path.basename(f).split('_')[3] for f in self.EEG_filenames_test]))
+		self.cls_map = {}
+		for i, cls in enumerate(self.cls):
+			self.cls_map[cls] = i
+		print('Loading Meta EEG csv done!')
+	
+	def __len__(self):
+		if self.type == 'train':
+			return len(self.EEG_filenames_train)
+		else:
+			return len(self.EEG_filenmaes_test)
+
+	def __getitem__(self, idx):
+		if self.type =='train':
+			#load csv data
+			e_path = self.EEG_filenames_train[idx]
+			cls_ = os.path.basename(e_path).split('_')[3]
+			csv_data = genfromtxt(e_path, delimiter=',')
+			#if you want normalize please normalize csv_data here
+			eeg_data = torch.FloatTensor(csv_data[:, 1:361]) #I should fill the zero last array which shorter than threshold
+			
+			#Image has mush bigger size so we should differ transform between Img and Spc
+
+			i_path = self.Img_filenames_train[idx]
+			image = Image.open(i_path).convert('RGB')
+
+			s_path = self.Spc_filenames_train[idx]
+			spc = Image.open(s_path).convert('RGB')
+			
+			if self.transform:
+				image = self.transform(image)
+				spc = self.transform(spc)
+
+			cls = self.cls_map[cls_]
+			#pdb.set_trace()
+			#print(eeg_data.shape, image.shape, spc.shape, cls, sep='  ')
+			return eeg_data, image, spc, cls
+
+
+
+		
 
 
 
@@ -194,6 +332,8 @@ def initialize_weights(net):
 			nn.init.xavier_uniform(m.weight)
 		elif isinstance(m, nn.ConvTranspose3d):
 			nn.init.xavier_uniform(m.weight)
+		#elif isinstance(m, nn.GRU):
+		#	nn.init.xavier_uniform(m.weight)
 		elif isinstance(m, nn.Linear):
 			m.weight.data.normal_(0, 0.02)
 			m.bias.data.zero_()

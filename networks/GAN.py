@@ -13,9 +13,9 @@ import matplotlib.pyplot as plt
 #BatchNorm -> LayerNorm or pixelnorma
 
 class Generator(nn.Module):
-    def __init__(self):
+    def __init__(self, input_dim):
         super(Generator, self).__init__()
-        self.input_dim = 300
+        self.input_dim = input_dim#300
         self.input_height = 1
         self.input_width = 1
         self.output_dim = 3
@@ -24,35 +24,35 @@ class Generator(nn.Module):
         # Upsample + conv2d is better than convtranspose2d
         self.deconv = nn.Sequential(
             # 4
-            nn.Conv2d(self.input_dim, 512, 4, 1, 3, bias=False),
-            nn.InstanceNorm2d(512, affine=True),
-            #nn.BatchNorm2d(512),
+            nn.Conv2d(self.input_dim, 512, 4, 1, 3, bias=True),
+            #nn.InstanceNorm2d(512, affine=True),
+            nn.BatchNorm2d(512),
             nn.ReLU(),
 
             # 8
             nn.Upsample(scale_factor=2, mode='nearest'),
-            nn.Conv2d(512, 256, 3, 1, 1, bias=False),
-            nn.InstanceNorm2d(256, affine=True),
-            #nn.BatchNorm2d(256),
+            nn.Conv2d(512, 256, 3, 1, 1, bias=True),
+            #nn.InstanceNorm2d(256, affine=True),
+            nn.BatchNorm2d(256),
             nn.ReLU(),
 
             # 16
             nn.Upsample(scale_factor=2, mode='nearest'),
-            nn.Conv2d(256, 128, 3, 1, 1, bias=False),
-            nn.InstanceNorm2d(128, affine=True),
-            #nn.BatchNorm2d(128),
+            nn.Conv2d(256, 128, 3, 1, 1, bias=True),
+            #nn.InstanceNorm2d(128, affine=True),
+            nn.BatchNorm2d(128),
             nn.ReLU(),
 
             # 32
             nn.Upsample(scale_factor=2, mode='nearest'),
-            nn.Conv2d(128, 64, 3, 1, 1, bias=False),
-            nn.InstanceNorm2d(64, affine=True),
-            #nn.BatchNorm2d(64),
+            nn.Conv2d(128, 64, 3, 1, 1, bias=True),
+            #nn.InstanceNorm2d(64, affine=True),
+            nn.BatchNorm2d(64),
             nn.ReLU(),
 
             # 64
             nn.Upsample(scale_factor=2, mode='nearest'),
-            nn.Conv2d(64, self.output_dim, 3, 1, 1, bias=False),
+            nn.Conv2d(64, self.output_dim, 3, 1, 1, bias=True),
             nn.Sigmoid(),
         )
 
@@ -69,33 +69,33 @@ class Discriminator(nn.Module):
         self.num_cls = num_cls
 
         self.conv = nn.Sequential(
-            nn.Conv2d(self.input_dim, 32, 4, 2, 1, bias=False), # 64 -> 32
+            nn.Conv2d(self.input_dim, 32, 4, 2, 1, bias=True), # 64 -> 32
             nn.InstanceNorm2d(32, affine=True),
             #nn.BatchNorm2d(32),
             nn.LeakyReLU(0.2),
 
-            nn.Conv2d(32, 64, 4, 2, 1, bias=False),  # 32 -> 16
+            nn.Conv2d(32, 64, 4, 2, 1, bias=True),  # 32 -> 16
             nn.InstanceNorm2d(64, affine=True),
             #nn.BatchNorm2d(64),
             nn.LeakyReLU(0.2),
 
-            nn.Conv2d(64, 128, 4, 2, 1, bias=False),  # 16 -> 8
+            nn.Conv2d(64, 128, 4, 2, 1, bias=True),  # 16 -> 8
             nn.InstanceNorm2d(128, affine=True),
             #nn.BatchNorm2d(128),
             nn.LeakyReLU(0.2),
 
-            nn.Conv2d(128, 256, 4, 2, 1, bias=False),  # 8 -> 4
+            nn.Conv2d(128, 256, 4, 2, 1, bias=True),  # 8 -> 4
             nn.InstanceNorm2d(256, affine=True),
             #nn.BatchNorm2d(256),
             nn.LeakyReLU(0.2),
         )
 
         self.convCls = nn.Sequential(
-            nn.Conv2d(256, self.num_cls, 4, bias=False),
+            nn.Conv2d(256, self.num_cls, 4, bias=True),
         )
 
         self.convGAN = nn.Sequential(
-            nn.Conv2d(256, 1, 4, bias=False),
+            nn.Conv2d(256, 1, 4, bias=True),
             nn.Sigmoid(),
             #Flatten()
         )
@@ -111,11 +111,11 @@ class Discriminator(nn.Module):
 class GAN(object):
     def __init__(self, args):
         #parameters
-        self.batch_size = 128 #args.batch_size
-        self.epoch = 300#args.epoch
+        self.batch_size = args.batch_size
+        self.epoch = args.epoch
         
-        self.save_dir = '../models'#args.save_dir
-        self.result_dir = '../results'#args.result_dir
+        self.save_dir = args.save_dir
+        self.result_dir = args.result_dir
         self.dataset = "ImageNet"#args.dataset
         self.dataroot_dir = '../../ImageNet/ILSVRC/Data/DET'#args.dataroot_dir
         '''
@@ -123,9 +123,9 @@ class GAN(object):
         self.multi_gpu = args.multi_gpu
         '''
         self.model_name = args.gan_type+args.comment
-        self.sample_num = 128
-        self.gpu_mode = True#args.gpu_mode
-        self.num_workers = 0#args.num_workers
+        self.sample_num = args.sample_num
+        self.gpu_mode = args.gpu_mode
+        self.num_workers = args.num_workers
         self.beta1 = args.beta1
         self.beta2 = args.beta2
         self.lrG = args.lrG
@@ -134,16 +134,18 @@ class GAN(object):
         self.lambda_ = 0.25
         self.n_critic = args.n_critic
         self.use_gp = args.use_gp
-        self.enc_dim = 300
-        self.num_cls = 10
+        self.enc_dim = args.latent_dim#300
+        self.num_cls = args.num_cls#10
+        self.sample = args.sample#'normal'
+        self.d_trick = args.d_trick
 
         #load dataset
-        self.data_loader = DataLoader(utils.ImageNet(root_dir = '../../ImageNet/ILSVRC/Data/DET',transform=transforms.Compose([transforms.Scale(100), transforms.RandomCrop(64),  transforms.ToTensor()]),_type=self.type, num_cls = self.num_cls),
+        self.data_loader = DataLoader(utils.ImageNet(root_dir = self.dataroot_dir, transform=transforms.Compose([transforms.Scale(64), transforms.RandomCrop(64),  transforms.ToTensor()]),_type=self.type, num_cls = self.num_cls),
                                       batch_size=self.batch_size, shuffle=True, num_workers=self.num_workers)
 
 
         #networks init
-        self.G = Generator()
+        self.G = Generator(self.enc_dim)
         self.D = Discriminator(num_cls=self.num_cls)
 
         self.G_optimizer = optim.Adam(self.G.parameters(), lr=self.lrG, betas=(self.beta1, self.beta2))
@@ -157,14 +159,20 @@ class GAN(object):
             self.MSE_loss = nn.MSELoss().cuda()
             self.L1_loss = nn.L1Loss().cuda()
             self.ML_loss = nn.MultiLabelMarginLoss().cuda()
-            self.sample_z_ = Variable(torch.rand((self.batch_size, self.enc_dim)).cuda(), volatile=True)
+            if self.sample == 'random':
+                self.sample_z_ = Variable(torch.rand((self.batch_size, self.enc_dim)).cuda(), volatile=True)
+            elif self.sample == 'normal':
+                self.sample_z_ = Variable(torch.FloatTensor(self.batch_size, self.enc_dim).normal_(0.0, 1.0).cuda(), volatile=True)
         else:
             self.CE_loss = nn.CrossEntropyLoss()
             self.BCE_loss = nn.BCELoss()
             self.MSE_loss = nn.MSELoss()
             self.L1_loss = nn.L1Loss()
             self.ML_loss = nn.MultiLabelMarginLoss()
-            self.sample_z_ = Variable(torch.rand((self.batch_size, self.enc_dim)), volatile=True)
+            if self.sample == 'random':
+                self.sample_z_ = Variable(torch.rand((self.batch_size, self.enc_dim)), volatile=True)
+            elif self.sample == 'normal':
+                self.sample_z_ = Variable(torch.FloatTensor(self.batch_size, self.enc_dim).normal_(0.0, 1.0), volatile=True)
 
     def train(self):
         self.train_hist = {}
@@ -191,8 +199,10 @@ class GAN(object):
                     break
 
                 #--Make Laten Space--#
-                z_ = torch.rand(self.batch_size, self.enc_dim)
-                #z_ = torch.FloatTensor(self.batch_size, self.enc_dim).normal_(0.0, 1.0)
+                if self.sample == 'random':
+                    z_ = torch.rand(self.batch_size, self.enc_dim)
+                elif self.sample == 'normal':
+                    z_ = torch.FloatTensor(self.batch_size, self.enc_dim).normal_(0.0, 1.0)
 
 
                 if self.gpu_mode:
@@ -247,8 +257,11 @@ class GAN(object):
 
 
                 D_loss.backward()
-                if D_acc<0.8:
+                if self.d_trick:
+                    if (D_acc<0.8):
                     #print("D train!")
+                        self.D_optimizer.step()
+                else:
                     self.D_optimizer.step()
                
 
@@ -285,8 +298,9 @@ class GAN(object):
 
             #---- Check train result ----#
             self.train_hist['per_epoch_time'].append(time.time()-epoch_start_time)
-            self.visualize_results((epoch+1))
-            utils.loss_plot(self.train_hist, os.path.join(self.result_dir, self.dataset, self.model_name), self.model_name)
+            if ((epoch % 100) == 0):
+                self.visualize_results((epoch+1))
+                utils.loss_plot(self.train_hist, os.path.join(self.result_dir, self.dataset, self.model_name), self.model_name)
             #We can check with or without Encoder output at here ex) self.G.Dec(z_) vs self.G(x_,z_)
                     
         self.train_hist['total_time'].append(time.time() - start_time)

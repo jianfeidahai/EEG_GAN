@@ -75,7 +75,7 @@ class Discriminator(nn.Module):
         self.num_cls = num_cls
 
         self.conv = nn.Sequential(
-            nn.Conv2d(self.input_dim, 32, 4, 2, 1, bias=False), # 64 -> 32
+            nn.Conv2d(self.input_dim+ self.num_cls, 32, 4, 2, 1, bias=False), # 64 -> 32
             #nn.InstanceNorm2d(32, affine=True),
             nn.BatchNorm2d(32),
             nn.LeakyReLU(0.2),
@@ -106,15 +106,16 @@ class Discriminator(nn.Module):
             #Flatten()
         )
 
-    def forward(self, y_):
-        feature = self.conv(y_)
-
+    def forward(self, feature, label):
+        #pdb.set_trace()
+        feature = torch.cat([feature, label],1)
+        feature = self.conv(feature)
         fGAN = self.convGAN(feature).squeeze(3).squeeze(2)
-        fcls = self.convCls(feature).squeeze(3).squeeze(2)
+        
 
-        return fGAN, fcls
+        return fGAN
 
-class ACGAN(object):
+class CGAN(object):
     def __init__(self, args):
         #parameters
         self.batch_size = args.batch_size
@@ -163,9 +164,8 @@ class ACGAN(object):
         self.sample_class = torch.zeros(self.batch_size, self.num_cls)
         for iS in range(self.batch_size):
             ii = iS%self.num_cls
-            self.sample_class[iS, ii] = 1
-        
-
+            self.sample_class[iS, ii] = 1     
+	
         if self.gpu_mode:
             self.G = self.G.cuda()
             self.D = self.D.cuda()
@@ -197,7 +197,11 @@ class ACGAN(object):
         self.train_hist['G_loss'] = []
         self.train_hist['per_epoch_time'] = []
         self.train_hist['total_time'] = []
-        
+         
+        self.fill = torch.zeros([self.num_cls, self.num_cls, 64, 64])
+        for i in range(self.num_cls):
+            self.fill[i, i, :, :] = 1
+
         if self.gpu_mode:
             self.y_real_, self.y_fake_ = Variable(torch.ones(self.batch_size, 1).cuda()), Variable(torch.zeros(self.batch_size, 1).cuda())
         else:
@@ -220,30 +224,30 @@ class ACGAN(object):
                     z_ = torch.rand(self.batch_size, self.enc_dim)
                 elif self.sample == 'normal':
                     z_ = torch.FloatTensor(self.batch_size, self.enc_dim).normal_(0.0, 1.0)
-
+              
                 y_class_onehot_ = torch.zeros(self.batch_size, self.num_cls)
                 y_class_onehot_.scatter_(1, class_label.view(-1, 1), 1)
-
+                y_fill_ = self.fill[torch.max(y_class_onehot_, 1)[1].squeeze()]
+                
                 if self.gpu_mode:
                     x_, z_, class_label_ = Variable(x_.cuda()), Variable(z_.cuda()), Variable(class_label.cuda())
-                    class_onehot_ = Variable(y_class_onehot_.cuda())
+                    class_onehot_, y_fill_ = Variable(y_class_onehot_.cuda()), Variable(y_fill_.cuda())
                 else:
                     x_, z_, class_label_ = Variable(x_), Variable(z_), Variable(class_label)
-                    class_onehot_ = Variable(y_class_onehot_)
+                    class_onehot_, y_fill_ = Variable(y_class_onehot_), Variable(y_fill_)
+           
 
 
 
                 #----Update D_network----#
                 #pdb.set_trace() 
                 self.D_optimizer.zero_grad()
-                D_real, C_real = self.D(x_)
+                D_real = self.D(x_, y_fill_)
                 D_real_loss = self.BCE_loss(D_real, self.y_real_)
-                C_real_loss = self.CE_loss(C_real, class_label_)
 
                 G_ = self.G(z_, class_onehot_)
-                D_fake, C_fake = self.D(G_)
+                D_fake = self.D(G_, y_fill_)
                 D_fake_loss = self.BCE_loss(D_fake, self.y_fake_)
-                C_fake_loss = self.CE_loss(C_fake, class_label_)
 
                 # gradient penalty
                 if self.gpu_mode:
@@ -253,21 +257,21 @@ class ACGAN(object):
 
                 x_hat = Variable(alpha * x_.data + (1 - alpha) * G_.data, requires_grad=True)
 
-                pred_hat, class_hat = self.D(x_hat)
+                pred_hat = self.D(x_hat, y_fill_)
                 if self.gpu_mode:
                     gradients = grad(outputs=pred_hat, inputs=x_hat, grad_outputs=torch.ones(pred_hat.size()).cuda(),
                                  create_graph=True, retain_graph=True, only_inputs=True)[0]
                 else:
                     gradients = grad(outputs=pred_hat, inputs=x_hat, grad_outputs=torch.ones(pred_hat.size()),
                                      create_graph=True, retain_graph=True, only_inputs=True)[0]
-
-                gradient_penalty = self.lambda_ * ((gradients.view(gradients.size()[0], -1).norm(2, 1) - 1) ** 2).mean()
+                #pdb.set_trace()
+                gradient_penalty = self.lambda_ * ((gradients.contiguous().view(gradients.size()[0], -1).norm(2, 1) - 1) ** 2).mean()
 
 
                 if self.use_gp:
-                    D_loss = D_real_loss + D_fake_loss + C_fake_loss + C_real_loss + gradient_penalty
+                    D_loss = D_real_loss + D_fake_loss + gradient_penalty
                 else:
-                    D_loss = D_real_loss + D_fake_loss + C_fake_loss + C_real_loss
+                    D_loss = D_real_loss + D_fake_loss
                 self.train_hist['D_loss'].append(D_loss.data[0])
                 
                 num_correct_real = torch.sum(D_real > 0.5)
@@ -292,17 +296,16 @@ class ACGAN(object):
                     self.G_optimizer.zero_grad()
                 
                     G_ = self.G(z_, class_onehot_)
-                    D_fake, C_fake= self.D(G_)
+                    D_fake = self.D(G_, y_fill_)
 
                     G_fake_loss = self.BCE_loss(D_fake, self.y_real_)
-                    C_fake_loss = self.CE_loss(C_fake, class_label_)
                     #G_recon_loss = self.MSE_loss(G_, y_)
-                    G_recon_loss = self.L1_loss(G_, x_)
+                    #G_recon_loss = self.L1_loss(G_, x_)
 
                     num_wrong_fake = torch.sum(D_fake > 0.5)
                     G_acc = float(num_wrong_fake.data[0]) / self.batch_size
 
-                    G_loss = G_fake_loss + C_fake_loss# + G_recon_loss*100
+                    G_loss = G_fake_loss # + G_recon_loss*100
                     if iG == 0:
                         print("[E%03d]"%epoch,"G_loss : ", G_loss.data[0], "  D_loss : ", D_loss.data[0], "   D_acc : ", D_acc, "  G_acc : ", G_acc)
                         self.train_hist['G_loss'].append(G_loss.data[0])
