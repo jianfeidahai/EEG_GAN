@@ -76,14 +76,15 @@ class ImageNet(Dataset):
 
 
 class EEG_ImageNet(Dataset):
-	def __init__(self, root_dir, transform = None, _type = None):
+	def __init__(self, root_dir, transform = None, _type = None, mini = 0):
 		self.EEG_filenames=[]
 		self.root_dir = root_dir #../../../EEG~
 		self.transform = transform
 		self.type = _type #train or test
 		self.Img_root_dir = '../../ImageNet/ILSVRC/Data/DET/train/ILSVRC2013_train'
 		self.Spc_root_dir = '../../eegImagenet/mindbigdata-imagenet-in-v1.0/MindBigData-Imagenet-v1.0-Imgs'
-
+		self.mini = mini
+		limit = -1	
 		self.EEG_dic=defaultdict(list)
 		
 		self.EEG_filenames_train = []
@@ -99,7 +100,7 @@ class EEG_ImageNet(Dataset):
 		fname_cache = 'EEG_cache.txt'
 		if os.path.exists(fname_cache):
 			self.EEG_filenames = open(fname_cache).read().splitlines()
-			print('Already cache file exists! Load from here...')
+			print('Already EEG_cache file exists! Load from here...')
 		else:
 			if self.type == 'train':
 				path = root_dir
@@ -117,7 +118,17 @@ class EEG_ImageNet(Dataset):
 		fname_cache_eeg_train, fname_cache_eeg_test = './cache/EEG_cache_train.txt', './cache/EEG_cache_test.txt'
 		fname_cache_img_train, fname_cache_img_test = './cache/Img_cache_train.txt', './cache/Img_cache_test.txt'
 		fname_cache_spc_train, fname_cache_spc_test = './cache/Spc_cache_train.txt', './cache/Spc_cache_test.txt'
-		
+
+		if self.mini !=  0:
+			limit = self.mini
+			fname_cache_eeg_train = os.path.join(os.path.dirname(fname_cache_eeg_train), str(limit)+'_'+os.path.basename(fname_cache_eeg_train))
+			fname_cache_eeg_test = os.path.join(os.path.dirname(fname_cache_eeg_test), str(limit)+'_'+os.path.basename(fname_cache_eeg_test))
+			fname_cache_img_train = os.path.join(os.path.dirname(fname_cache_img_train), str(limit)+'_'+os.path.basename(fname_cache_img_train))
+			fname_cache_img_test = os.path.join(os.path.dirname(fname_cache_img_test), str(limit)+'_'+os.path.basename(fname_cache_img_test))
+			fname_cache_spc_train = os.path.join(os.path.dirname(fname_cache_spc_train), str(limit)+'_'+os.path.basename(fname_cache_spc_train))
+			fname_cache_spc_test = os.path.join(os.path.dirname(fname_cache_spc_test), str(limit)+'_'+os.path.basename(fname_cache_spc_test))
+
+
 		if os.path.exists(fname_cache_eeg_train):
 			self.EEG_filenames_train = open(fname_cache_eeg_train).read().splitlines()
 			self.EEG_filenames_test = open(fname_cache_eeg_test).read().splitlines()
@@ -135,6 +146,11 @@ class EEG_ImageNet(Dataset):
 			for iB, key in enumerate(self.EEG_dic):
 				length = len(self.EEG_dic[key])
 				train_len = int(length*0.8)
+
+				#control num_cls
+				if iB == limit:
+					break
+
 				for i in range(length):
 					basename = os.path.basename(self.EEG_dic[key][i][0]).split('.')[0]
 					e_path = self.EEG_dic[key][i][0]
@@ -168,9 +184,19 @@ class EEG_ImageNet(Dataset):
 			with open(fname_cache_spc_test, 'w') as f:
 				for fname in self.Spc_filenames_test:
 					f.write(fname+'\n')
-		
+	
+		'''
+		if self.mini:
+			#train
+			self.EEG_filenames_train = self.EEG_filenames_train[:100]
+			self.Img_filenames_train = self.Img_filenames_train[:100]
+			self.Spc_filenames_train = self.Spc_filenames_train[:100]
 			
-		
+			self.EEG_filenames_test = self.EEG_filenames_test[:20]
+			self.Img_filenames_test = self.Img_filenames_test[:20]
+			self.Spc_filenames_test = self.Spc_filenames_test[:20]
+		'''
+	
 		#get EEG csv file path
 		if self.type == 'train': 
 			self.cls = sorted(set([os.path.basename(f).split('_')[3] for f in self.EEG_filenames_train]))
@@ -185,7 +211,7 @@ class EEG_ImageNet(Dataset):
 		if self.type == 'train':
 			return len(self.EEG_filenames_train)
 		else:
-			return len(self.EEG_filenmaes_test)
+			return len(self.EEG_filenames_test)
 
 	def __getitem__(self, idx):
 		if self.type =='train':
@@ -213,7 +239,25 @@ class EEG_ImageNet(Dataset):
 			#print(eeg_data.shape, image.shape, spc.shape, cls, sep='  ')
 			return eeg_data, image, spc, cls
 
+		elif self.type == 'test':
+			e_path = self.EEG_filenames_test[idx]
+			cls_ = os.path.basename(e_path).split('_')[3]
+			csv_data = genfromtxt(e_path, delimiter=',')
 
+			eeg_data = torch.FloatTensor(csv_data[:, 1:351])
+
+			i_path = self.Img_filenames_test[idx]
+			image = Image.open(i_path).convert('RGB')
+
+			s_path = self.Spc_filenames_test[idx]
+			spc = Image.open(s_path).convert('RGB')
+
+			if self.transform:
+				image = self.transform(image)
+				spc = self.transform(spc)
+
+			cls = self.cls_map[cls_]
+			return eeg_data, image, spc, cls
 
 		
 

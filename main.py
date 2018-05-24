@@ -6,6 +6,7 @@ from networks.CGAN import CGAN
 from networks.EEG_GAN import EEG_GAN
 from networks.EEG_GAN_SN import EEG_GAN_SN
 from networks.EEG_EncGAN import EEG_EncGAN
+from networks.EEG_Encoder import EEG_Encoder
 import pdb
 
 def str2bool(v):
@@ -21,7 +22,7 @@ def parse_args():
 	desc = "Pytorch implementation of GAN collections"
 	parser = argparse.ArgumentParser(description=desc)
 
-	parser.add_argument('--gan_type', type=str, default='GAN', choices=['GAN', 'denseGAN', 'CGAN', 'ACGAN', 'EEG_GAN', 'EEG_GAN_SN', 'EEG_EncGAN'], help='The type of GAN')#, required=True)
+	parser.add_argument('--gan_type', type=str, default='GAN', choices=['GAN', 'denseGAN', 'CGAN', 'ACGAN', 'EEG_GAN', 'EEG_GAN_SN', 'EEG_EncGAN', 'EEG_Encoder'], help='The type of GAN')#, required=True)
 	parser.add_argument('--dataset', type=str, default='ImageNet', choices=['mnist', 'fashion-mnist', 'celebA', 'MultiPie','miniPie', 'CASIA-WebFace','ShapeNet', 'Bosphorus', 'ImageNet'], help='The name of dataset')
 	parser.add_argument('--dataroot_dir', type=str, default='data', help='root path of data')
 	parser.add_argument('--epoch', type=int, default=25, help='The number of epochs to run')
@@ -47,6 +48,7 @@ def parse_args():
 	parser.add_argument('--sample', type=str, default='normal', choices=['normal', 'random'])
 	parser.add_argument('--num_cls', type=int, default=10)
 	parser.add_argument('--d_trick', type=str2bool, default=True)
+	parser.add_argument('--use_recon', type=str2bool, default=False)
 
 	# below arguments are for eval mode
 	parser.add_argument('--type', type=str, default='train', help='train or test')
@@ -120,12 +122,15 @@ def main():
 		gan = EEG_GAN_SN(opts)
 	elif opts.gan_type == 'EEG_EncGAN':
 		gan = EEG_EncGAN(opts)
+	elif opts.gan_type == 'EEG_Encoder':
+		gan = EEG_Encoder(opts)
 	else:
 		raise Exception("[!] There is no option for " + opts.gan_type)
 
 	if opts.type == 'train':
 		gan.train()
 		print("[*] Training finished")
+		
 	elif opts.type == 'test':
 		gan.test()
 		print("[*] Test finished")

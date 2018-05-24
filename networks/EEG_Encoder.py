@@ -12,55 +12,78 @@ from spectral_normalization import SpectralNorm
 import pdb
 
 class Encoder(nn.Module):
-	def __init__(self):
+	def __init__(self, num_cls):
 		super(Encoder, self).__init__()
 		self.input_dim = 3
 		self.input_height = 64
 		self.input_width = 64
-		self.output_dim = 50
+		self.output_dim = num_cls#50
 
 		self.conv = nn.Sequential(
-			nn.Conv2d(self.input_dim, 64, 3, 4, 2, bias=True),
+			nn.Conv2d(self.input_dim, 32, 3, 1, 1),
+			nn.BatchNorm2d(32),
+			nn.ReLU(),
+			nn.Conv2d(32, 64, 3, 1, 1),
 			nn.BatchNorm2d(64),
-			#nn.InstanceNorm2d(64, affine=True),
 			nn.ReLU(),
 
-			nn.Conv2d(64, 128, 4, 2, 1, bias=True),
+			nn.Conv2d(64, 64, 4, 2, 1), # 64 -> 31
+			nn.BatchNorm2d(64),
+			nn.ReLU(),
+			nn.Conv2d(64, 64, 3, 1, 1),
+			nn.BatchNorm2d(64),
+			nn.ReLU(),
+			nn.Conv2d(64, 128, 3, 1, 1),
 			nn.BatchNorm2d(128),
-			#nn.InstanceNorm2d(128, affine=True),
 			nn.ReLU(),
 
-			nn.Conv2d(128, 256, 4, 2, 1, bias=True),
+			nn.Conv2d(128, 128, 4, 2, 1),# 31->15
+			nn.BatchNorm2d(128),
+			nn.ReLU(),
+			nn.Conv2d(128, 128, 3, 1, 1),
+			nn.BatchNorm2d(128),
+			nn.ReLU(),
+			nn.Conv2d(128, 256, 3, 1, 1),
 			nn.BatchNorm2d(256),
-			#nn.InstanceNorm2d(256, affine=True),
 			nn.ReLU(),
 
-			nn.Conv2d(256, 512, 4, 2, 1, bias=True),
-			nn.BatchNorm2d(512),
-			#nn.InstanceNorm2d(512, affine=True),
+			nn.Conv2d(256, 256, 4, 2, 1),# 8->4
+			nn.BatchNorm2d(256),
+			nn.ReLU(),
+			nn.Conv2d(256, 160, 3, 1, 1),
+			nn.BatchNorm2d(160),
+			nn.ReLU(),
+			nn.Conv2d(160, 320, 3, 1, 1),
+			nn.BatchNorm2d(320),
 			nn.ReLU(),
 
-			nn.Conv2d(512, self.output_dim, 4, 2, 1, bias=True),
+			nn.AvgPool2d(6)
 			#nn.Sigmoid(),
+		)
+
+		self.fc = nn.Sequential(
+			nn.Linear(320, self.output_dim),
+			#nn.Sigmoid()
 		)
 
 		utils.initialize_weights(self)
 
 	def forward(self, input):
 		x = self.conv(input).squeeze(3).squeeze(2)
+		x = self.fc(x)
 		return x
 
 class GRU_Encoder(nn.Module):
 	def __init__(self, num_cls):
 		super(GRU_Encoder, self).__init__()
-		self.hidden_dim = 20
+		self.hidden_dim = 3
 		self.input_dim = 5
-		self.output_dim = 50#num_cls # class_num or feature dimension(for concat)
+		self.output_dim = num_cls#50 # class_num or feature dimension(for concat)
 	
 		self.GRU = nn.GRU(self.input_dim, self.hidden_dim, num_layers = 1,  batch_first = True, dropout=0.5)
 		self.fc = nn.Sequential(
 			nn.Linear(self.hidden_dim , self.output_dim),
-			nn.Sigmoid()
+			#nn.Sigmoid()
 		)
 		#utils.initialize_weights(self)
 
@@ -219,7 +242,7 @@ class Discriminator(nn.Module):
 		return fGAN, fcls
 
 
-class EEG_GAN(object):
+class EEG_Encoder(object):
 	def __init__(self, args):
 		#parameters
 		self.batch_size = args.batch_size
@@ -249,19 +272,22 @@ class EEG_GAN(object):
 
 		#load dataset
 		self.data_loader = DataLoader(utils.EEG_ImageNet(root_dir = self.dataroot_EEG_dir,transform=transforms.Compose([transforms.Scale(64),transforms.RandomCrop(64),transforms.ToTensor()]),_type = self.type, mini=self.mini), batch_size=self.batch_size, shuffle=True, num_workers=self.num_workers)
-			
+		
+		self.test_loader = DataLoader(utils.EEG_ImageNet(root_dir = self.dataroot_EEG_dir, transform=transforms.Compose([transforms.Scale(64), transforms.RandomCrop(64), transforms.ToTensor()]),_type = 'test', mini=self.mini), batch_size = self.batch_size, shuffle=True, num_workers=self.num_workers)
+
+
 		#self.num_cls = self.data_loader.dataset.num_cls
 		self.num_cls = len(self.data_loader.dataset.cls_map)
 
-		self.G = Generator(self.num_cls)
-		self.D = Discriminator(self.num_cls)
+		self.E = Encoder(self.num_cls)
+		self.GRU = GRU_Encoder(self.num_cls)
 
-		self.G_optimizer = optim.Adam(self.G.parameters(), lr=self.lrG, betas=(self.beta1, self.beta2))
-		self.D_optimizer = optim.Adam(self.D.parameters(), lr=self.lrD, betas=(self.beta1, self.beta2))
+		self.E_optimizer = optim.Adam(self.E.parameters(), lr=self.lrD, betas=(self.beta1, self.beta2))
+		self.GRU_optimizer = optim.Adam(self.GRU.parameters(), lr=self.lrD, betas=(self.beta1, self.beta2))
 
 		if self.gpu_mode:
-			self.G = self.G.cuda()
-			self.D = self.D.cuda()
+			self.E = self.E.cuda()
+			self.GRU = self.GRU.cuda()
 			self.CE_loss = nn.CrossEntropyLoss().cuda()
 			self.L1_loss = nn.L1Loss().cuda()
 			self.BCE_loss = nn.BCELoss().cuda()
@@ -273,8 +299,8 @@ class EEG_GAN(object):
 
 	def train(self):
 		self.train_hist = {}
+		self.train_hist['E_loss'] = []
 		self.train_hist['G_loss'] = []
-		self.train_hist['D_loss'] = []
 		self.train_hist['per_epoch_time']=[]
 		self.train_hist['total_time']=[]
 
@@ -284,19 +310,19 @@ class EEG_GAN(object):
 			self.y_real_, self.y_fake_ = Variable(torch.ones(self.batch_size, 1)), Variable(torch.zeros(self.batch_size, 1))
 
 		#train
-		self.D.train()
+		self.E.train()
+		self.GRU.train()
 		start_time = time.time()
 		print('All class is %03d'%self.num_cls)
 		for epoch in range(self.epoch):
 			epoch_start_time = time.time()
-			self.G.train()
 			for iB, (eeg, x, spc, class_label) in enumerate(self.data_loader):
 				if iB == self.data_loader.dataset.__len__() // self.batch_size:
 					break
 
 				#--Make Latent Space--#
-				z_ = torch.rand(self.batch_size, self.enc_dim)
-				#z_ = torch.FloatTensor(self.batch_size, self.enc_dim).normal_(0.0, 1.0)
+				#z_ = torch.rand(self.batch_size, self.enc_dim)
+				z_ = torch.FloatTensor(self.batch_size, self.enc_dim).normal_(0.0, 1.0)
 
 				if self.gpu_mode:
 					x_, z_, class_label_, eeg_, spc_ = Variable(x.cuda()), Variable(z_.cuda()), Variable(class_label.cuda()), Variable(eeg.cuda()), Variable(spc.cuda())
@@ -304,77 +330,71 @@ class EEG_GAN(object):
 					x_, z_, class_label_, eeg_, spc_ = Variable(x), Variable(z_), Variable(class_label), Variable(eeg), Variable(spc)
 
 
-				#----Update D_network----#
-				self.D_optimizer.zero_grad()
-				D_real, C_real = self.D(x_)
-				D_real_loss = self.BCE_loss(D_real, self.y_real_)
-				C_real_loss = self.CE_loss(C_real, class_label_)
-				
-				G_ = self.G(eeg_, spc_, z_)
-				D_fake, C_fake = self.D(G_)
-				D_fake_loss = self.BCE_loss(D_fake, self.y_fake_)
-				C_fake_loss = self.CE_loss(C_fake, class_label_)
-				
-				D_ganloss = D_real_loss + D_fake_loss
-				D_clsloss = C_real_loss + C_fake_loss
+				#----Update E_network----#
+				self.E_optimizer.zero_grad()
+				E_real = self.E(spc_)
+				E_loss = self.CE_loss(E_real, class_label_)
+				self.train_hist['E_loss'].append(E_loss.data[0])
+				E_loss.backward()
+				self.E_optimizer.step()
 
-				#gradient penalry
-				if self.gpu_mode:
-					alpha = torch.rand(x_.size()).cuda()
-				else:
-					alpha = torch.rand(x_.size())
-
-				x_hat = Variable(alpha * x_.data + (1-alpha)*G_.data, requires_grad=True)
-
-				pred_hat, class_hat = self.D(x_hat)
-				if self.gpu_mode:
-					gradients = grad(outputs=pred_hat, inputs=x_hat, grad_outputs=torch.ones(pred_hat.size()).cuda(), create_graph=True, retain_graph=True, only_inputs=True)[0]
-				else:
-					gradients = grad(outputs=pred_hat, inputs=x_hat, grad_outputs=torch.ones(pred_hat.size()), create_output=True, retain_graph = True, only_inputs=True)[0]
-
-				gradient_penalty = self.lambda_ *((gradients.view(gradients.size()[0], -1).norm(2,1) -1)**2).mean()
-
-				D_loss = D_ganloss + D_clsloss + gradient_penalty
-				self.train_hist['D_loss'].append(D_loss.data[0])
-				
-				num_correct_real = torch.sum(D_real > 0.5)
-				num_correct_fake = torch.sum(D_fake < 0.5)
-
-				D_acc = float(num_correct_real.data[0] + num_correct_fake.data[0]) / (self.batch_size*2)
-				D_loss.backward()
-				if self.d_trick:
-					if (D_acc < 0.8):
-						self.D_optimizer.step()
-				else:
-					self.D_optimizer.step()
-
-				#----Update G_network----#
-				for iG in range(self.n_critic):
-					self.G_optimizer.zero_grad()
-					G_ = self.G(eeg_, spc_, z_)
-					D_fake, C_fake = self.D(G_)
-					G_fake_loss = self.BCE_loss(D_fake, self.y_real_)
-					G_cls_loss = self.CE_loss(C_fake, class_label_)
-
-					if self.use_recon:
-						G_recon_loss = self.L1_loss(G_, x_)
-						G_loss = G_fake_loss + G_cls_loss + G_recon_loss*80
-					else:
-						G_loss = G_fake_loss + G_cls_loss
-					if iG == (self.n_critic-1):
-						self.train_hist['G_loss'].append(G_loss.data[0])
-					G_loss.backward()
-					self.G_optimizer.step()
+				#----Update GRU_network----#
+				self.GRU_optimizer.zero_grad()
+				G_real = self.GRU(eeg_)
+				G_loss = self.CE_loss(G_real, class_label_)
+				self.train_hist['G_loss'].append(G_loss.data[0])
+				G_loss.backward()
+				self.GRU_optimizer.step()
 				#---check train result ----#
 				if(iB % 100 == 0):
-					print('[E%03d]'%(epoch)+'D_loss : ',D_loss.data[0],' = ', D_ganloss.data[0],' + ',D_clsloss.data[0], '  G_loss : ', G_fake_loss.data[0],' + ' , G_cls_loss.data[0], 'D_acc :', D_acc)
-					self.visualize_results(epoch, eeg_, spc_, z_, x_, iB)
+					print('[E%03d]'%(epoch)+'E_loss : %.6f'%E_loss.data[0]+'  GRU_loss : %.6f'%G_loss.data[0])
 			#---check train result ----#
 			self.train_hist['per_epoch_time'].append(time.time()-epoch_start_time)
 			utils.loss_plot(self.train_hist, os.path.join(self.result_dir, self.dataset, self.model_name), self.model_name)
 		
 		print("Training finish!... save training results")
 		self.save()
+	
+	def test(self):
+		self.load()
+		self.GRU.eval()
+		self.E.eval()
+		print('Test start!')
+		
+		E_acc = 0
+		G_acc = 0
+
+		for iB, (eeg, x, spc, class_label) in enumerate(self.test_loader):
+			if iB == self.test_loader.dataset.__len__() // self.batch_size:
+				break
+			
+			if self.gpu_mode:
+				x, spc, eeg, class_label = Variable(x.cuda()), Variable(spc.cuda()), Variable(eeg.cuda()), Variable(class_label.cuda())
+			else:
+				x, spc, eeg, class_label = Variable(x), Variable(spc), Variable(eeg), Variable(class_label)
+
+			E_real = self.E(spc)
+			G_real = self.GRU(eeg)
+			
+			_, index_E = torch.max(E_real, 1)
+			E_acc += float((index_E==class_label).sum())
+			
+			E_result = (index_E.data[0] == class_label.data[0])
+			'''
+			if E_result:
+				E_acc += 1
+			'''
+			_, index_G = torch.max(G_real, 1)
+			G_result = (index_G.data[0] == class_label.data[0])
+			if G_result:
+				G_acc +=1
+
+			print('class label : %02d'%class_label.data[0]+'  E_result :  %02d'%index_E.data[0],E_result,'   GRU_reslut :  %02d'%index_G.data[0], G_result)
+			
+		print('Total E_acc is %.3f'%(E_acc)+'  Total G_acc is %.3f'%(G_acc))
+
+			#print('E_loss : %.6f'%E_loss.data[0]+'  GRU_loss :  %.6f'%G_loss.data[0])
+		
 
 
 	def visualize_results(self, epoch, eeg, spc, z, y, iB, fix=True):
@@ -406,8 +426,8 @@ class EEG_GAN(object):
 		if not os.path.exists(save_dir):
 			os.makedirs(save_dir)
 
-		torch.save(self.G.state_dict(), os.path.join(save_dir, self.model_name + '_G.pkl'))
-		torch.save(self.D.state_dict(), os.path.join(save_dir, self.model_name + '_D.pkl'))
+		torch.save(self.E.state_dict(), os.path.join(save_dir, self.model_name + '_E.pkl'))
+		torch.save(self.GRU.state_dict(), os.path.join(save_dir, self.model_name + '_GRU.pkl'))
 
 		with open(os.path.join(save_dir, self.model_name + '_history.pkl'), 'wb') as f:
 			pickle.dump(self.train_hist, f)
@@ -415,7 +435,7 @@ class EEG_GAN(object):
 	def load(self):
 		save_dir = os.path.join(self.save_dir, self.dataset, self.model_name)
 
-		self.G.load_state_dict(torch.load(os.path.join(save_dir, self.model_name + '_G.pkl')))
-		self.D.load_state_dict(torch.load(os.path.join(save_dir, self.model_name + '_D.pkl')))
+		self.E.load_state_dict(torch.load(os.path.join(save_dir, self.model_name + '_E.pkl')))
+		self.GRU.load_state_dict(torch.load(os.path.join(save_dir, self.model_name + '_GRU.pkl')))
 
 
