@@ -15,6 +15,175 @@ from itertools import islice
 import pandas as pd
 from numpy import genfromtxt
 from collections import defaultdict
+import scipy.io as sio
+
+class EEG(Dataset):
+	def __init__(self, root_dir, transform = None, _type = None):
+		self.filenames = []
+		self.root_dir = '../../eeg/eeg_128/eeg_matlab/'#root_dir
+		self.transform = transform
+		self.type = _type
+
+		print('Loading EEG matLab metadata...')
+		sys.stdout.flush()
+		time_start = time.time()
+
+		fname_cache = 'EEG_mat_cache.txt'
+		fname_cache_train, fname_cache_test = './cache/train.txt' , './cache/test.txt'
+		
+		if os.path.exists(fname_cache):
+			self.filenames = open(fname_cache).read().splitlines()
+			print('Already cache file exists! Load from here...')
+		else:
+			self.filenames = [os.path.join(dirpath,f) for dirpath, dirnames, files in os.walk(self.root_dir) for f in files ]
+			with open(fname_cache, 'w') as f:
+				for fname in self.filenames:
+					f.write(fname+'\n')
+			print('---Make cache file---')
+		
+
+		self.filenames_train = []
+		self.filenames_test = []
+		self.EEG_dict = defaultdict(list)
+		if os.path.exists(fname_cache_train) and os.path.exists(fname_cache_test):
+			self.filenames_train = open(fname_cache_train).read().splitlines()
+			self.filenames_test = open(fname_cache_test).read().splitlines()
+			print('Already cache file exists! Load from here...')
+		else:
+			for i, item in enumerate(self.filenames):
+				cls = os.path.basename(item).split('_')[0]
+				self.EEG_dict[cls].append((item))
+
+			for iB, key in enumerate(self.EEG_dict):
+				length = len(self.EEG_dict[key])
+				train_len = int(length*0.8)
+				for i in range(length):
+					basename = self.EEG_dict[key][i]
+					if i<= train_len:
+						self.filenames_train.append(basename)
+					else:
+						self.filenames_test.append(basename)
+		'''
+		if self.type == 'train':
+			self.cls = sorted(set([os.path.basename(f).split('_')[0] for f in self.filenames_train]))
+			self.id = sorted(set([os.path.dirname(f).split('/')[-1] for f in self.filenames_train]))
+		else:
+			self.cls = sorted(set([os.path.basename(f).split('_')[0] for f in self.filenames_test]))
+			self.id = sorted(set([os.path.dirname(f).split('/')[-1] for f in self.filenames_test]))
+		'''
+
+		
+		with open(fname_cache_train, 'w')as f:
+			for fname in self.filenames_train:
+				f.write(fname+'\n')
+		with open(fname_cache_test, 'w')as f:
+			for fname in self.filenames_test:
+				f.write(fname+'\n')
+
+		self.cls = sorted(set([os.path.basename(f).split('_')[0] for f in self.filenames]))
+		self.id = sorted(set([os.path.dirname(f).split('/')[-1] for f in self.filenames]))
+
+		self.cls_map = {}
+		self.id_map = {}
+		for i, cls in enumerate(self.cls):
+			self.cls_map[cls] = i
+		for i, id_ in enumerate(self.id):
+			self.id_map[id_] = i
+		
+		
+
+	def __len__(self):
+		if self.type == 'train':
+			return len(self.filenames_train)
+		elif self.type == 'test':
+			return len(self.filenames_test)
+	
+	def __getitem__(self, idx):
+		n_ch = 128
+		len_ = 512
+		eeg_ = np.zeros((n_ch, len_))
+		filenames = []
+		if self.type == 'train':
+			filenames = self.filenames_train
+		else:
+			filenames = self.filenames_test
+		
+		cls_ = os.path.basename(filenames[idx]).split('_')[0]
+		id_ = os.path.dirname(filenames[idx]).split('/')[-1]
+			
+		curr_x = sio.loadmat(filenames[idx])['x']
+		curr_x = np.swapaxes(curr_x, 0, 1)
+		eeg_[:,:min(curr_x.shape[1], 440)] = curr_x[:,40:480]
+		
+		#normalize
+		#eeg_ = eeg_ / np.linalg.norm(eeg_)
+
+		eeg_ = torch.FloatTensor(eeg_)
+		cls_ = self.cls_map[cls_]
+		id_ = self.id_map[id_]
+
+		return eeg_, cls_, id_
+
+class EEG_pytorch(Dataset):
+	def __init__(self, root_dir, transform = None, _type = None, num_cls = None):
+		self.filenames = []
+		self.transform=transform
+		self.root_dir = '../../eeg/eeg_128/data/'
+		self.Img_root_dir = '../../ImageNet/Data/'
+		self.data_path = 'eeg_signals_128_sequential_band_all_with_mean_std.pth'
+		self.split_path = 'splits_by_image.pth'
+		self.data = torch.load(self.root_dir+self.data_path)
+		self.split = torch.load(self.root_dir+self.split_path)
+
+		self.mean = self.data['means']
+		self.stdev = self.data['stddevs']
+
+		self.labels = self.split['splits'][0][_type]
+		self.images = self.data['images']
+		self.eeg = []
+
+		for label in self.labels:
+			#image check
+			data = self.data['dataset'][label]
+			img_idx = data['image']
+			img_path = str(self.images[img_idx])
+			dir_path = str(self.images[img_idx].split('_')[0])
+			path = os.path.join(self.Img_root_dir, dir_path, img_path+'.JPEG')
+			if os.path.exists(path):
+				self.eeg.append(self.data['dataset'][label])
+		
+		#assert len(self.eeg)==len(self.labels)
+		self.dlen = 440
+
+	def __len__(self):
+		return len(self.eeg)
+	
+	def __getitem__(self, idx):
+		nch = 128
+		dlen = self.dlen
+		eeg_ = np.zeros((nch, dlen))
+		cls_ = self.eeg[idx]['label']
+		sub_ = self.eeg[idx]['subject']
+		img_idx = self.eeg[idx]['image']
+		img_path = str(self.images[img_idx])
+		dir_path = str(self.images[img_idx].split('_')[0]) 
+
+		path = os.path.join(self.Img_root_dir, dir_path, img_path+'.JPEG')
+
+		image = Image.open(path)
+		image = image.convert('RGB')
+
+		if self.transform:
+			image = self.transform(image)
+
+		eeg_ = torch.FloatTensor(eeg_)
+		eeg_[:, :min(int(self.eeg[idx]['eeg'].shape[1]), dlen)] = self.eeg[idx]['eeg'][:, 40:40+dlen]
+
+		#image_path = 
+		
+
+		return image, eeg_, cls_, sub_
+		#return eeg_, cls_, sub_
 
 
 class ImageNet(Dataset):
@@ -56,6 +225,8 @@ class ImageNet(Dataset):
 		for i, cls in enumerate(self.cls):
 			self.cls_map[cls] = i	
 		print('Loading ImageNet done!')
+
+		
 	
 	def __len__(self):
 		return len(self.filenames)

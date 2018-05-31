@@ -13,9 +13,9 @@ import matplotlib.pyplot as plt
 #BatchNorm -> LayerNorm or pixelnorma
 
 class Generator(nn.Module):
-    def __init__(self, Nc):
+    def __init__(self, Nc, dim):
         super(Generator, self).__init__()
-        self.input_dim = 300
+        self.input_dim = dim
         self.input_height = 1
         self.input_width = 1
         self.output_dim = 3
@@ -56,7 +56,12 @@ class Generator(nn.Module):
 
             # 64
             nn.Upsample(scale_factor=2, mode='nearest'),
-            nn.Conv2d(64, self.output_dim, 3, 1, 1, bias=False),
+            nn.Conv2d(64, 32, 3, 1, 1, bias=False),
+            nn.BatchNorm2d(32),
+			
+            #128
+            nn.Upsample(scale_factor=2, mode='nearest'),
+            nn.Conv2d(32, self.output_dim, 3, 1, 1, bias=False),
             nn.Sigmoid(),
         )
 
@@ -94,14 +99,18 @@ class Discriminator(nn.Module):
             #nn.InstanceNorm2d(256, affine=True),
             nn.BatchNorm2d(256),
             nn.LeakyReLU(0.2),
+
+            nn.Conv2d(256, 512, 4, 2, 1, bias=False),
+            nn.BatchNorm2d(512),
+            nn.LeakyReLU(0.2),
         )
 
         self.convCls = nn.Sequential(
-            nn.Conv2d(256, self.num_cls, 4, bias=False),
+            nn.Conv2d(512, self.num_cls, 4, bias=False),
         )
 
         self.convGAN = nn.Sequential(
-            nn.Conv2d(256, 1, 4, bias=False),
+            nn.Conv2d(512, 1, 4, bias=False),
             nn.Sigmoid(),
             #Flatten()
         )
@@ -142,18 +151,20 @@ class ACGAN(object):
         self.use_gp = args.use_gp
         self.sample = args.sample
         self.d_trick = args.d_trick
+        self.use_recon = args.use_recon
 
         self.enc_dim = args.latent_dim#300
         self.num_cls = args.num_cls#10
+        self.resl = 128
 
         #load dataset
-        self.data_loader = DataLoader(utils.ImageNet(root_dir = '../../ImageNet/ILSVRC/Data/DET',transform=transforms.Compose([transforms.Scale(64), transforms.RandomCrop(64),  transforms.ToTensor()]),_type=self.type, num_cls = self.num_cls),
+        self.data_loader = DataLoader(utils.ImageNet(root_dir = '../../ImageNet/ILSVRC/Data/DET',transform=transforms.Compose([transforms.Scale(self.resl), transforms.RandomCrop(self.resl),  transforms.ToTensor()]),_type=self.type, num_cls = self.num_cls),
                                       batch_size=self.batch_size, shuffle=True, num_workers=self.num_workers)
 
         #self.num_cls = self.data_loader.dataset.num_cls # number of class ImageNet
         
         #networks init
-        self.G = Generator(self.num_cls)
+        self.G = Generator(self.num_cls, self.enc_dim)
         self.D = Discriminator(num_cls=self.num_cls)
 
         self.G_optimizer = optim.Adam(self.G.parameters(), lr=self.lrG, betas=(self.beta1, self.beta2))
@@ -164,7 +175,7 @@ class ACGAN(object):
         for iS in range(self.batch_size):
             ii = iS%self.num_cls
             self.sample_class[iS, ii] = 1
-        
+
 
         if self.gpu_mode:
             self.G = self.G.cuda()
@@ -232,7 +243,6 @@ class ACGAN(object):
                     class_onehot_ = Variable(y_class_onehot_)
 
 
-
                 #----Update D_network----#
                 #pdb.set_trace() 
                 self.D_optimizer.zero_grad()
@@ -297,19 +307,24 @@ class ACGAN(object):
                     G_fake_loss = self.BCE_loss(D_fake, self.y_real_)
                     C_fake_loss = self.CE_loss(C_fake, class_label_)
                     #G_recon_loss = self.MSE_loss(G_, y_)
-                    G_recon_loss = self.L1_loss(G_, x_)
-
+                    if self.use_recon:
+                        G_recon_loss = self.L1_loss(G_, x_)
+                        G_loss = G_fake_loss + C_fake_loss + 10*G_recon_loss
+                    else:
+                        G_loss = G_fake_loss + C_fake_loss
                     num_wrong_fake = torch.sum(D_fake > 0.5)
                     G_acc = float(num_wrong_fake.data[0]) / self.batch_size
 
-                    G_loss = G_fake_loss + C_fake_loss# + G_recon_loss*100
                     if iG == 0:
-                        print("[E%03d]"%epoch,"G_loss : ", G_loss.data[0], "  D_loss : ", D_loss.data[0], "   D_acc : ", D_acc, "  G_acc : ", G_acc)
+                        print("[E%03d]"%epoch+"G_loss : %.6f = %.6f + %.6f "%(G_loss.data[0], G_fake_loss.data[0], C_fake_loss.data[0])+"  D_loss : %.6f"%D_loss.data[0]+"   D_acc : %.6f"%D_acc+"  G_acc : %.6f"%G_acc)
                         self.train_hist['G_loss'].append(G_loss.data[0])
                 
                     G_loss.backward()
                     self.G_optimizer.step()
-                #self.save_gt((epoch+1), x_)
+                if (iB % 100) == 0:
+                    self.save_gt((epoch+1), x_)
+                    self.save_g((epoch+1), G_)
+                    #self.visualize_results((epoch+1))
 
             #---- Check train result ----#
             self.train_hist['per_epoch_time'].append(time.time()-epoch_start_time)
@@ -317,6 +332,7 @@ class ACGAN(object):
                 self.visualize_results((epoch+1))
                 utils.loss_plot(self.train_hist, os.path.join(self.result_dir, self.dataset, self.model_name), self.model_name)
             #We can check with or without Encoder output at here ex) self.G.Dec(z_) vs self.G(x_,z_)
+            self.save()
                     
         self.train_hist['total_time'].append(time.time() - start_time)
         print("Avg one epoch time: %.2f, total %d epochs time: %.2f" % (np.mean(self.train_hist['per_epoch_time']),
@@ -382,4 +398,15 @@ class ACGAN(object):
             samples = y.numpy().data.transpose(0, 2, 3, 1)
         utils.save_images(samples[:image_frame_dim*image_frame_dim, :, :, :], [image_frame_dim, image_frame_dim], self.result_dir+'/'+self.dataset+'/'+self.model_name+'/'+self.model_name+'_E%03d'%epoch+'GT.png')
 
+    def save_g(self, epoch, G_):
+        if not os.path.exists(self.result_dir + '/' + self.dataset + '/' + self.model_name):
+            os.makedirs(self.result_dir + '/' + self.dataset + '/' + self.model_name)
+        tot_num_samples = min(self.sample_num, self.batch_size)
+        image_frame_dim = int(np.floor(np.sqrt(tot_num_samples)))
+        
+        if self.gpu_mode:
+            samples = G_.cpu().data.numpy().transpose(0, 2, 3, 1)
+        else:
+            samples = G_.numpy().data.transpose(0, 2, 3, 1)
+        utils.save_images(samples[:image_frame_dim*image_frame_dim, :, :, :], [image_frame_dim, image_frame_dim], self.result_dir+'/'+self.dataset+'/'+self.model_name+'/'+self.model_name+'_E%03d'%epoch+'G_.png')
 
